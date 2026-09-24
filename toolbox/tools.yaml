@@ -1,5 +1,5 @@
 # ==========================================
-# 1. FUENTE DE DATOS (Si no la tienes, añade el sandbox)
+# 1. FUENTE DE DATOS
 # ==========================================
 sources:
   bigquery_logistica_sbx:
@@ -7,33 +7,31 @@ sources:
     project: tot-corp-plo-sbx
 
 # ==========================================
-# 2. DEFINICIÓN DE LA HERRAMIENTA
+# 2. DEFINICIÓN DE HERRAMIENTAS MCP
 # ==========================================
 tools:
+  # ----------------------------------------------------
+  # HERRAMIENTA 1: Búsqueda general de despachos y TIM
+  # ----------------------------------------------------
   consultar_despachos_logistica:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Consulta el estado de despachos, transferencias (Trf_DO), envíos y pedidos 
-      en tránsito desde el Centro de Distribución (Whse) hacia las tiendas en los 
-      últimos 60 días. Permite buscar por número de TIM específico o filtrar 
-      por tienda y SKU.
+      Consulta el detalle de despachos y transferencias en tránsito desde el CD
+      hacia las tiendas en los últimos 60 días. Permite buscar por TIM, tienda o SKU.
     parameters:
       - name: tim
         type: integer
-        description: "Número identificador del TIM o transferencia logística (ej. 655425244). Enviar null o 0 si se busca por tienda."
+        description: "Número identificador del TIM o transferencia logística (ej. 655425244). Enviar null o 0 si no se tiene."
         required: false
-
       - name: tienda
         type: integer
-        description: "Número ID de la tienda destino (ej. 123, 104, 114 o F12). Opcional si se especifica TIM."
+        description: "Número ID de la tienda destino (ej. 123, 114, 104). Opcional si se especifica TIM."
         required: false
-
       - name: sku
         type: string
-        description: "Código SKU del producto. Opcional para filtrar un artículo específico dentro del despacho."
+        description: "Código SKU del producto. Opcional para filtrar un artículo específico."
         required: false
-
     statement: |
       SELECT 
           tim,
@@ -55,9 +53,112 @@ tools:
       ORDER BY Fecha_Enviado DESC
       LIMIT 100;
 
+  # ----------------------------------------------------
+  # HERRAMIENTA 2: Rastrear por Shipment o Trf_DO
+  # ----------------------------------------------------
+  buscar_por_shipment_o_do:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Rastrea despachos logísticos buscando específicamente por el número de 
+      Shipment o por la Orden de Entrega/Transferencia (Trf_DO).
+    parameters:
+      - name: shipment
+        type: string
+        description: "Número de Shipment logístico a buscar. Opcional si se proporciona Trf_DO."
+        required: false
+      - name: trf_do
+        type: string
+        description: "Número de Trf_DO (Transfer Delivery Order). Opcional si se proporciona Shipment."
+        required: false
+    statement: |
+      SELECT 
+          tim,
+          Shipment, 
+          Trf_DO,
+          Tipo_DO,
+          sku, 
+          Descripcion,
+          Inventario_Whse, 
+          Tienda,
+          Nombre_Tienda, 
+          Fecha_Enviado 
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND (@shipment IS NULL OR @shipment = '' OR CAST(Shipment AS STRING) = @shipment)
+        AND (@trf_do IS NULL OR @trf_do = '' OR CAST(Trf_DO AS STRING) = @trf_do)
+      ORDER BY Fecha_Enviado DESC
+      LIMIT 100;
+
+  # ----------------------------------------------------
+  # HERRAMIENTA 3: Resumen de volumen enviado a una tienda
+  # ----------------------------------------------------
+  resumen_volumen_despachos_tienda:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Obtiene el resumen consolidado de despachos enviados a una tienda en los últimos 
+      60 días, agrupado por fecha y almacén de origen (Inventario_Whse), mostrando la 
+      cantidad de transferencias, shipments y SKUs distintos enviados.
+    parameters:
+      - name: tienda
+        type: integer
+        description: "ID de la tienda destino a consultar (ej. 123, 114)."
+        required: true
+    statement: |
+      SELECT 
+          Fecha_Enviado,
+          Inventario_Whse,
+          Nombre_Tienda,
+          COUNT(DISTINCT tim) AS total_tims,
+          COUNT(DISTINCT Shipment) AS total_shipments,
+          COUNT(DISTINCT Trf_DO) AS total_ordenes_do,
+          COUNT(DISTINCT sku) AS total_skus_distintos
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND Tienda = @tienda
+      GROUP BY Fecha_Enviado, Inventario_Whse, Nombre_Tienda
+      ORDER BY Fecha_Enviado DESC
+      LIMIT 30;
+
+  # ----------------------------------------------------
+  # HERRAMIENTA 4: Top SKUs más despachados hacia una tienda
+  # ----------------------------------------------------
+  top_skus_en_transito_tienda:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Muestra el ranking de los productos (SKUs) que más despachos y transferencias 
+      han tenido hacia una tienda en los últimos 60 días para identificar reposición frecuente.
+    parameters:
+      - name: tienda
+        type: integer
+        description: "ID de la tienda destino a consultar (ej. 123)."
+        required: true
+      - name: limite
+        type: integer
+        description: "Cantidad de productos a mostrar en el ranking (por defecto 15)."
+        required: false
+    statement: |
+      SELECT 
+          sku,
+          Descripcion,
+          COUNT(1) AS frecuencia_envios,
+          COUNT(DISTINCT tim) AS total_tims,
+          MAX(Fecha_Enviado) AS ultimo_envio
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND Tienda = @tienda
+      GROUP BY sku, Descripcion
+      ORDER BY frecuencia_envios DESC
+      LIMIT COALESCE(@limite, 15);
+
 # ==========================================
-# 3. REGISTRARLA EN EL TOOLSET
+# 3. REGISTRO EN EL TOOLSET
 # ==========================================
 toolsets:
   insights_operativos:
     - consultar_despachos_logistica
+    - buscar_por_shipment_o_do
+    - resumen_volumen_despachos_tienda
+    - top_skus_en_transito_tienda
