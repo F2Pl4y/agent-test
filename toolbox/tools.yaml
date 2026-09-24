@@ -1,0 +1,63 @@
+# ==========================================
+# 1. FUENTE DE DATOS (Si no la tienes, añade el sandbox)
+# ==========================================
+sources:
+  bigquery_logistica_sbx:
+    kind: bigquery
+    project: tot-corp-plo-sbx
+
+# ==========================================
+# 2. DEFINICIÓN DE LA HERRAMIENTA
+# ==========================================
+tools:
+  consultar_despachos_logistica:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Consulta el estado de despachos, transferencias (Trf_DO), envíos y pedidos 
+      en tránsito desde el Centro de Distribución (Whse) hacia las tiendas en los 
+      últimos 60 días. Permite buscar por número de TIM específico o filtrar 
+      por tienda y SKU.
+    parameters:
+      - name: tim
+        type: integer
+        description: "Número identificador del TIM o transferencia logística (ej. 655425244). Enviar null o 0 si se busca por tienda."
+        required: false
+
+      - name: tienda
+        type: integer
+        description: "Número ID de la tienda destino (ej. 123, 104, 114). Opcional si se especifica TIM."
+        required: false
+
+      - name: sku
+        type: string
+        description: "Código SKU del producto. Opcional para filtrar un artículo específico dentro del despacho."
+        required: false
+
+    statement: |
+      SELECT 
+          tim,
+          Shipment, 
+          sku, 
+          Descripcion,
+          Trf_DO,
+          Tipo_DO,
+          Inventario_Whse, 
+          Tienda,
+          Nombre_Tienda, 
+          Fecha_Enviado 
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado < CURRENT_DATE("America/Lima")
+        AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
+        AND (@tienda IS NULL OR @tienda = 0 OR Tienda = @tienda)
+        AND (@sku IS NULL OR @sku = '' OR sku = @sku)
+      ORDER BY Fecha_Enviado DESC
+      LIMIT 100;
+
+# ==========================================
+# 3. REGISTRARLA EN EL TOOLSET
+# ==========================================
+toolsets:
+  insights_operativos:
+    - consultar_despachos_logistica
