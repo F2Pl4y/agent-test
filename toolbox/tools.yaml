@@ -26,7 +26,7 @@ tools:
 
       - name: tienda
         type: integer
-        description: "Número ID de la tienda destino (ej. 123, 104, 114). Opcional si se especifica TIM."
+        description: "Número ID de la tienda destino (ej. 123, 104, 114 o F12). Opcional si se especifica TIM."
         required: false
 
       - name: sku
