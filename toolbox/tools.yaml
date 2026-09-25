@@ -34,14 +34,31 @@ tools:
         type: string
         description: "Código SKU del producto. Opcional para rastrear un artículo puntual."
         required: false
-      - name: placa
-        type: string
-        description: "Placa del vehículo/camión de transporte. Opcional."
-        required: false
-      - name: offset
+      - name: pagina
         type: integer
-        description: "Número de fila desde donde iniciar la lectura (0 para los primeros 50, 50 para los siguientes, etc.). Por defecto 0."
+        description: "Número de página a consultar (1 para filas 1-50, 2 para filas 51-100, etc.). Por defecto 1."
         required: false
+    statement: |
+      WITH datos AS (
+        SELECT 
+            tim,
+            Shipment, 
+            sku, 
+            Descripcion,
+            Trf_DO,
+            Tipo_DO,
+            Inventario_Whse, 
+            Tienda,
+            Nombre_Tienda, 
+            Fecha_Enviado,
+            ROW_NUMBER() OVER(ORDER BY Fecha_Enviado DESC, sku) AS num_fila
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+        WHERE Fecha_Enviado < CURRENT_DATE("America/Lima")
+          AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+          AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
+          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
+          AND (@sku IS NULL OR @sku = '' OR sku = @sku)
+      )
       SELECT 
           tim,
           Shipment, 
@@ -52,16 +69,10 @@ tools:
           Inventario_Whse, 
           Tienda,
           Nombre_Tienda, 
-          Fecha_Enviado 
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado < CURRENT_DATE("America/Lima")
-        AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
-        AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
-        AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
-        AND (@sku IS NULL OR @sku = '' OR sku = @sku)
-      ORDER BY Fecha_Enviado DESC
-      LIMIT 50
-      OFFSET @offset;
+          Fecha_Enviado
+      FROM datos
+      WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
+      ORDER BY num_fila;
 
   # ----------------------------------------------------
   # HERRAMIENTA 2: Consolidado de carga por Camión (Placa) o TIM
