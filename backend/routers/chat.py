@@ -21,7 +21,8 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
         response = await agente_logistica.run(
             user_prompt=request.message,
             session_id=session_id,
-            tienda_id=request.tienda_id
+            tienda_id=request.tienda_id,
+            include_data=request.include_data
         )
         return response
     except Exception as e:
