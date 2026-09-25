@@ -38,35 +38,30 @@ tools:
         type: string
         description: "Placa del vehículo/camión de transporte. Opcional."
         required: false
-    statement: |
+      - name: offset
+        type: integer
+        description: "Número de fila desde donde iniciar la lectura (0 para los primeros 50, 50 para los siguientes, etc.). Por defecto 0."
+        required: false
       SELECT 
           tim,
-          Shipment,
-          Placa,
+          Shipment, 
           sku, 
           Descripcion,
-          Division,
-          Departamento,
-          Unidades,
-          Cajas,
-          ROUND(Peso_Total, 2) AS peso_total_kg,
-          ROUND(Vol_Enviado, 2) AS volumen_m3,
-          Fecha_Vencimiento,
+          Trf_DO,
+          Tipo_DO,
+          Inventario_Whse, 
           Tienda,
           Nombre_Tienda, 
-          Inventario_Whse,
-          Fecha_Enviado,
-          Hora_de_Enviado,
-          Trf_DO,
-          Tipo_DO
+          Fecha_Enviado 
       FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+      WHERE Fecha_Enviado < CURRENT_DATE("America/Lima")
+        AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
         AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
         AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
         AND (@sku IS NULL OR @sku = '' OR sku = @sku)
-        AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
-      ORDER BY Fecha_Enviado DESC, Hora_de_Enviado DESC
-      LIMIT 100;
+      ORDER BY Fecha_Enviado DESC
+      LIMIT 50
+      OFFSET @offset;
 
   # ----------------------------------------------------
   # HERRAMIENTA 2: Consolidado de carga por Camión (Placa) o TIM
