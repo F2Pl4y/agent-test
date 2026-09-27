@@ -46,16 +46,28 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
+# Ruta al repositorio frontend agente-transporte-front
+front_path = Path(__file__).resolve().parent.parent.parent / "agente-transporte-front"
+if front_path.exists():
+    app.mount("/app", StaticFiles(directory=str(front_path), html=True), name="frontend")
+    logger.info(f"🌐 Frontend montado en: http://localhost:8000/app/ (desde {front_path})")
 
 # Registrar las rutas del API
 app.include_router(chat_router)
 
 @app.get("/", tags=["General"])
 async def root():
+    if front_path.exists():
+        return RedirectResponse(url="/app/")
     return {
         "message": "Bienvenido al Backend del Agente Logístico Tottus",
         "docs_url": "/docs",

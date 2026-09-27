@@ -10,9 +10,17 @@ class Settings:
     # URL del servidor MCP Toolbox
     TOOLBOX_URL: str = os.getenv("TOOLBOX_URL", "http://localhost:5001/mcp")
     
-    # Proyectos GCP
-    BIGQUERY_PROJECT: str = os.getenv("BIGQUERY_PROJECT", "tot-corp-plo-sbx")
-    VERTEXAI_PROJECT: str = os.getenv("VERTEXAI_PROJECT", "tot-bi-corp-arq-dev")
+    # Proyectos GCP (leídos dinámicamente desde el archivo local .env)
+    @property
+    def BIGQUERY_PROJECT(self) -> str:
+        load_dotenv(dotenv_path=env_path, override=True)
+        return os.getenv("BIGQUERY_PROJECT", "").strip()
+
+    @property
+    def VERTEXAI_PROJECT(self) -> str:
+        load_dotenv(dotenv_path=env_path, override=True)
+        return os.getenv("VERTEXAI_PROJECT", "").strip()
+
     GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
     
     @property

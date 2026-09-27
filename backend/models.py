@@ -6,6 +6,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="Pregunta del usuario en lenguaje natural", example="¿Qué productos y despachos hay en el TIM 655423616?")
     session_id: Optional[str] = Field(default=None, description="Identificador único de sesión conversacional")
     tienda_id: Optional[str] = Field(default=None, description="Código de la tienda (ej. '123', '114') si se conoce")
+    user_email: Optional[str] = Field(default=None, description="Correo corporativo del usuario autenticado para control de acceso RBAC")
     pais: Optional[str] = Field(default="PE", description="Código del país ('PE' o 'CL')")
     include_data: bool = Field(default=False, description="Si es True, incluye las filas crudas de BigQuery en el campo 'data'. Por defecto False para ahorrar ancho de banda.")
 

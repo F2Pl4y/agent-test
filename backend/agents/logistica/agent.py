@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from backend.config import settings
 from backend.models import ToolExecution, ChatResponse
 from backend.agents._shared.loader import mcp_client
-from backend.agents.logistica.prompts import SYSTEM_INSTRUCTION_LOGISTICA
+from backend.agents.logistica.prompts import SYSTEM_INSTRUCTION_LOGISTICA, get_system_instruction_logistica
 
 logger = logging.getLogger("backend.agent_logistica")
 
@@ -118,12 +118,14 @@ class LogisticaAgent:
             ),
             types.FunctionDeclaration(
                 name="resumen_carga_transporte",
-                description="Consolida los bultos, cajas, unidades, peso total en kg y volumen cargado en un camión (por TIM o por Placa).",
+                description="Consolida los bultos, cajas, unidades, peso total en kg, volumen en m3 y camiones (por TIM, Placa, Tienda o Fecha 'YYYY-MM-DD').",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM."),
-                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte.")
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '123', '451')."),
+                        "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho en formato 'YYYY-MM-DD' (ej. '2026-09-26').")
                     },
                     required=[]
                 )
@@ -150,6 +152,29 @@ class LogisticaAgent:
                         "dias_margen": types.Schema(type=types.Type.INTEGER, description="Días máximos antes del vencimiento (por defecto 15).")
                     },
                     required=["tienda"]
+                )
+            ),
+            types.FunctionDeclaration(
+                name="buscar_por_shipment_o_do",
+                description="Permite rastrear despachos usando el número de Shipment o número de DO (Delivery Order) cuando no se conoce el TIM.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "shipment": types.Schema(type=types.Type.STRING, description="Número identificador del shipment (ej. '90327449')."),
+                        "trf_do": types.Schema(type=types.Type.STRING, description="Número de la orden de entrega Delivery Order (ej. '22796787').")
+                    },
+                    required=[]
+                )
+            ),
+            types.FunctionDeclaration(
+                name="buscar_tienda_por_nombre",
+                description="Busca el código numérico ID de una tienda a partir de su nombre comercial (ej. 'Huanuco', 'San Luis', 'Angamos').",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "nombre_parcial": types.Schema(type=types.Type.STRING, description="Nombre o texto parcial de la tienda a buscar.")
+                    },
+                    required=["nombre_parcial"]
                 )
             )
         ]
@@ -197,85 +222,135 @@ class LogisticaAgent:
 
             tools = self._build_tools_declaration()
             config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION_LOGISTICA,
+                system_instruction=get_system_instruction_logistica(),
                 tools=tools,
-                temperature=0.0  # Respuesta rápida y determinista
+                temperature=0.0  # Respuesta determinista y precisa
             )
 
-            # Turno 1: Gemini evalúa la consulta del usuario
-            logger.info(f"🤖 Procesando consulta: '{user_prompt}'")
-            response, used_model = await self._generate_content_with_retry(
-                client=client,
-                contents=user_prompt,
-                config=config,
-                primary_model=settings.GEMINI_MODEL
-            )
+            prompt_with_context = f"[Contexto de tienda seleccionada: Tienda ID '{tienda_id}']\n{user_prompt}" if tienda_id else user_prompt
 
-            # Verificar si Gemini solicitó ejecutar alguna función (Tool Call)
-            function_calls = []
-            if response.candidates and response.candidates[0].content:
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "function_call") and part.function_call:
-                        function_calls.append(part.function_call)
+            tool_role = "tool" if settings.USE_VERTEXAI else "user"
+            turn_contents = [
+                types.Content(role="user", parts=[types.Part.from_text(text=prompt_with_context)])
+            ]
+            final_text = ""
 
-            if not function_calls:
-                # Gemini respondió directamente sin necesidad de llamar a BigQuery
-                answer_text = response.text or "No se pudo obtener una respuesta directa."
-                return ChatResponse(
-                    answer=answer_text,
-                    session_id=session_id,
-                    tools_executed=[],
-                    data=None
+            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (tienda_id={tienda_id})")
+
+            # Bucle de razonamiento multi-paso (hasta 5 rondas de herramientas para razonamiento profundo)
+            for round_idx in range(5):
+                response, used_model = await self._generate_content_with_retry(
+                    client=client,
+                    contents=turn_contents,
+                    config=config,
+                    primary_model=settings.GEMINI_MODEL
                 )
 
-            # Turno 2: Ejecutar las herramientas solicitadas por Gemini
-            tool_responses_for_gemini = []
-            for call in function_calls:
-                fn_name = call.name
-                fn_args = dict(call.args or {})
-                logger.info(f"🛠️ Gemini decidió ejecutar: '{fn_name}' con args: {fn_args}")
+                if not response.candidates or not response.candidates[0].content:
+                    break
 
-                rows, exec_log = await self._execute_mcp_tool(fn_name, fn_args, include_data=include_data)
-                tools_executed.append(exec_log)
-                if rows:
-                    raw_data.extend(rows)
+                candidate_content = response.candidates[0].content
+                turn_contents.append(candidate_content)
 
-                # Optimización de tokens: Pasar una muestra estructurada o resumen a Gemini
-                # para que no desborde tokens si la consulta trajo cientos de filas
-                muestra_datos = rows[:25] if len(rows) > 25 else rows
-                resumen_payload = {
-                    "total_filas_obtenidas": len(rows),
-                    "muestra_registros": muestra_datos,
-                    "nota": f"Se recuperaron {len(rows)} filas en total de BigQuery. Aquí se proveen las primeras {len(muestra_datos)} para el resumen analítico." if len(rows) > 25 else "Totalidad de registros provistos."
-                }
+                # Verificar si Gemini solicitó ejecutar alguna función en esta ronda
+                round_function_calls = []
+                for part in candidate_content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        round_function_calls.append(part.function_call)
 
-                tool_responses_for_gemini.append(
-                    types.Part.from_function_response(
-                        name=fn_name,
-                        response={"result": resumen_payload}
+                if not round_function_calls:
+                    # No hay llamadas a herramientas en esta ronda: Gemini entregó el texto final
+                    text_parts = [p.text for p in candidate_content.parts if hasattr(p, "text") and p.text]
+                    final_text = "".join(text_parts).strip()
+                    break
+
+                # Ejecutar herramientas invocadas por Gemini
+                round_tool_responses = []
+                for call in round_function_calls:
+                    fn_name = call.name
+                    fn_args = dict(call.args or {})
+                    logger.info(f"🛠️ [Ronda {round_idx+1}] Gemini decidió ejecutar: '{fn_name}' con args: {fn_args}")
+
+                    rows, exec_log = await self._execute_mcp_tool(fn_name, fn_args, include_data=include_data)
+                    tools_executed.append(exec_log)
+                    if rows:
+                        raw_data.extend(rows)
+
+                    muestra_datos = rows[:25] if len(rows) > 25 else rows
+                    resumen_payload = {
+                        "total_filas_obtenidas": len(rows),
+                        "muestra_registros": muestra_datos,
+                        "nota": f"Se recuperaron {len(rows)} filas en total de BigQuery. Aquí se proveen las primeras {len(muestra_datos)} para el resumen analítico." if len(rows) > 25 else "Totalidad de registros provistos."
+                    }
+
+                    round_tool_responses.append(
+                        types.Part.from_function_response(
+                            name=fn_name,
+                            response={"result": resumen_payload}
+                        )
+                    )
+
+                turn_contents.append(
+                    types.Content(role=tool_role, parts=round_tool_responses)
+                )
+
+            # Si después del bucle aún no hay texto final, forzar síntesis ejecutiva
+            if not final_text:
+                logger.info("✍️ Forzando síntesis ejecutiva final...")
+                turn_contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(
+                            text="Con los datos obtenidos anteriormente, redacta ahora la respuesta ejecutiva final en lenguaje natural para el supervisor. Si no hubo despachos en la fecha solicitada, indícalo claramente y presenta la tabla de los camiones más recientes encontrados."
+                        )]
                     )
                 )
-
-            # Turno 3: Enviar los resultados de vuelta a Gemini (role='tool' en Vertex AI, role='user' en AI Studio)
-            tool_role = "tool" if settings.USE_VERTEXAI else "user"
-            turn_2_contents = [
-                types.Content(role="user", parts=[types.Part.from_text(text=user_prompt)]),
-                response.candidates[0].content,
-                types.Content(role=tool_role, parts=tool_responses_for_gemini)
-            ]
-
-            final_response, _ = await self._generate_content_with_retry(
-                client=client,
-                contents=turn_2_contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION_LOGISTICA,
+                synthesis_config = types.GenerateContentConfig(
+                    system_instruction=get_system_instruction_logistica(),
                     tools=tools,
                     temperature=0.2
-                ),
-                primary_model=used_model
-            )
+                )
+                synth_resp, _ = await self._generate_content_with_retry(
+                    client=client,
+                    contents=turn_contents,
+                    config=synthesis_config,
+                    primary_model=settings.GEMINI_MODEL
+                )
+                if synth_resp.candidates and synth_resp.candidates[0].content:
+                    text_parts = [p.text for p in synth_resp.candidates[0].content.parts if hasattr(p, "text") and p.text]
+                    final_text = "".join(text_parts).strip()
 
-            final_text = final_response.text or "Consulta procesada con éxito."
+            if not final_text:
+                if raw_data:
+                    # Construir tabla ejecutiva automática con los camiones recuperados
+                    lineas_camiones = []
+                    placas_vistas = set()
+                    for r in raw_data:
+                        placa = r.get("Placa")
+                        if placa and placa not in placas_vistas:
+                            placas_vistas.add(placa)
+                            fecha = r.get("fecha_despacho") or r.get("Fecha_Enviado", "")
+                            tim = r.get("tim", "N/D")
+                            whse = r.get("Inventario_Whse", "N/D")
+                            cajas = r.get("total_cajas", r.get("Cajas", 0))
+                            unidades = r.get("total_unidades", r.get("Unidades", 0))
+                            peso = r.get("peso_total_kg", r.get("Peso_Total", 0))
+                            vol = r.get("volumen_total_m3", r.get("Vol_Enviado", 0))
+                            lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg | {vol:,.2f} m³ |")
+                    
+                    if lineas_camiones:
+                        tabla = "\n".join(lineas_camiones[:10])
+                        final_text = (
+                            f"Se consultó el sistema central de transporte. A continuación tienes el detalle de los despachos y camiones encontrados:\n\n"
+                            f"| PLACA | TIM | ORIGEN | CAJAS | UNIDADES | PESO TOTAL | VOLUMEN |\n"
+                            f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                            f"{tabla}\n\n"
+                            f"*(Información verificada en el catálogo central de transportes Tottus)*"
+                        )
+                    else:
+                        final_text = f"Se recuperaron {len(raw_data)} registros del sistema de transportes para tu consulta."
+                else:
+                    final_text = "Para la fecha indicada no se registran despachos ni camiones en el sistema de transporte en los últimos 60 días."
 
             return ChatResponse(
                 answer=final_text,
@@ -408,10 +483,50 @@ class LogisticaAgent:
                 data=rows if (include_data and rows) else None
             )
 
+        # 3. Consulta de Shipment o DO en Fallback
+        shipment_match = re.search(r'\b(9\d{6,8}|\d{8,10})\b', user_prompt)
+        es_consulta_shipment = bool(re.search(r'\b(shipment|embarque|do|delivery\s*order|transferencia)\b', user_prompt, re.I))
+        if es_consulta_shipment and shipment_match:
+            shipment_id = shipment_match.group(1)
+            rows, exec_log = await self._execute_mcp_tool("buscar_por_shipment_o_do", {"shipment": shipment_id}, include_data=include_data)
+            if not rows:
+                answer = f"ℹ️ Se consultó el sistema para el Shipment **{shipment_id}**, pero no se encontraron registros de despachos asociados en los últimos 60 días."
+            else:
+                r = rows[0]
+                placa = r.get('Placa') or 'No registrada / En asignación'
+                tim = r.get('tim', 'N/D')
+                tienda = f"{r.get('Nombre_Tienda', '')} ({r.get('Tienda', '')})"
+                fecha = r.get('fecha_despacho', 'N/D')
+                do = r.get('Trf_DO', 'N/D')
+                skus = r.get('total_skus', 0)
+                cajas = r.get('total_cajas', 0)
+                unidades = r.get('total_unidades', 0)
+                peso = r.get('peso_total_kg', 0)
+
+                answer = (
+                    f"### 🚚 Rastreo de Shipment `{shipment_id}`\n\n"
+                    f"- 🚛 **Camión / Placa:** **`{placa}`**\n"
+                    f"- 📋 **TIM Asociado:** `{tim}`\n"
+                    f"- 🏪 **Tienda Destino:** {tienda}\n"
+                    f"- 📅 **Fecha de Despacho:** **{fecha}**\n"
+                    f"- 📄 **Orden de Entrega (DO):** `{do}`\n\n"
+                    f"#### 📦 Consolidado de Carga:\n"
+                    f"- **Total SKUs:** {skus}\n"
+                    f"- **Total Cajas:** {cajas}\n"
+                    f"- **Total Unidades:** {unidades}\n"
+                    f"- **Peso Total:** {peso:,.2f} kg\n"
+                )
+            return ChatResponse(
+                answer=answer,
+                session_id=session_id,
+                tools_executed=[exec_log],
+                data=rows if (include_data and rows) else None
+            )
+
         return ChatResponse(
             answer=(
                 f"No pude interpretar la consulta directamente o el servicio de IA reportó: {error_detail or 'Configuración requerida'}. "
-                "Por favor especifica un número de TIM (ej. '655423616') o verifica las credenciales de Gemini en el archivo .env."
+                "Por favor especifica un número de TIM (ej. '655423616'), placa de camión o Shipment para consultar los datos."
             ),
             session_id=session_id,
             tools_executed=[],

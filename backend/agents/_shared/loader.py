@@ -10,7 +10,7 @@ logger = logging.getLogger("backend.mcp_loader")
 
 class SimpleTTLCache:
     """Caché en memoria LRU + TTL para evitar re-consultar BigQuery repetidamente."""
-    def __init__(self, maxsize: int = 200, ttl_seconds: int = 1800):
+    def __init__(self, maxsize: int = 200, ttl_seconds: int = 300):
         self.maxsize = maxsize
         self.ttl = ttl_seconds
         self.cache: Dict[str, tuple[float, Any]] = {}
@@ -25,6 +25,9 @@ class SimpleTTLCache:
         return None
 
     def set(self, key: str, value: Any):
+        # NUNCA guardar en caché resultados vacíos o nulos para no bloquear consultas posteriores
+        if not value:
+            return
         if len(self.cache) >= self.maxsize:
             # Eliminar la clave más antigua
             oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][0])
@@ -42,8 +45,14 @@ class ToolboxMCPClient:
     """
     def __init__(self, base_url: str = None):
         self.base_url = base_url or settings.TOOLBOX_URL
-        self.cache = SimpleTTLCache(maxsize=200, ttl_seconds=1800)
+        self.cache = SimpleTTLCache(maxsize=200, ttl_seconds=300)
         self._cached_tools: Optional[List[Dict[str, Any]]] = None
+
+    def clear_cache(self):
+        """Purga la caché en memoria inmediatamente."""
+        self.cache.clear()
+        self._cached_tools = None
+        logger.info("🧹 Caché de Toolbox MCP purgada completamente.")
 
     async def check_health(self) -> bool:
         """Verifica si el servidor MCP Toolbox está activo y responde."""

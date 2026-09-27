@@ -55,3 +55,9 @@ async def health_endpoint() -> HealthResponse:
         tools_available=tools,
         model=settings.GEMINI_MODEL
     )
+
+@router.post("/cache/clear", summary="Limpiar la memoria caché de consultas")
+async def clear_cache_endpoint():
+    """Purga la memoria caché de consultas para forzar a BigQuery a recalcular datos frescos."""
+    mcp_client.clear_cache()
+    return {"status": "ok", "message": "Caché de consultas purgada exitosamente."}

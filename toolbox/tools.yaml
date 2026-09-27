@@ -43,6 +43,7 @@ tools:
         SELECT 
             tim,
             Shipment, 
+            Placa,
             sku, 
             Descripcion,
             Trf_DO,
@@ -53,7 +54,7 @@ tools:
             Fecha_Enviado,
             ROW_NUMBER() OVER(ORDER BY Fecha_Enviado DESC, sku) AS num_fila
         FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-        WHERE Fecha_Enviado < CURRENT_DATE("America/Lima")
+        WHERE Fecha_Enviado <= CURRENT_DATE("America/Lima")
           AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
           AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
           AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
@@ -62,6 +63,7 @@ tools:
       SELECT 
           tim,
           Shipment, 
+          Placa,
           sku, 
           Descripcion,
           Trf_DO,
@@ -86,11 +88,19 @@ tools:
     parameters:
       - name: tim
         type: integer
-        description: "Número TIM de la transferencia. Opcional si se busca por placa."
+        description: "Número TIM de la transferencia. Opcional si se busca por placa o tienda."
         required: false
       - name: placa
         type: string
         description: "Placa del camión de transporte. Opcional si se busca por TIM."
+        required: false
+      - name: tienda
+        type: string
+        description: "Código ID de la tienda destino (ej. '123' para Angamos, '451' para Huanuco). Opcional."
+        required: false
+      - name: fecha
+        type: string
+        description: "Fecha específica de despacho en formato YYYY-MM-DD (ej. '2026-09-26'). Opcional."
         required: false
     statement: |
       SELECT 
@@ -110,8 +120,15 @@ tools:
       WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
         AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
         AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
+        AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
+        AND (
+          @fecha IS NULL OR @fecha = '' 
+          OR CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
+          OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
+        )
       GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
-      LIMIT 20;
+      ORDER BY fecha_despacho DESC, total_cajas DESC
+      LIMIT 50;
 
   # ----------------------------------------------------
   # HERRAMIENTA 3: Despachos agregados por División Comercial (J01 a J11)
@@ -183,6 +200,74 @@ tools:
       ORDER BY Fecha_Vencimiento ASC
       LIMIT 50;
 
+  # ----------------------------------------------------
+  # HERRAMIENTA 5: Rastreo por Shipment o Delivery Order (Trf_DO)
+  # ----------------------------------------------------
+  buscar_por_shipment_o_do:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Permite rastrear despachos cuando el usuario no tiene el número de TIM,
+      pero cuenta con el identificador del Shipment o el número de Trf_DO (Delivery Order).
+      Devuelve el TIM asociado, placa del camión, tienda destino, fecha de despacho y resumen de carga.
+    parameters:
+      - name: shipment
+        type: string
+        description: "Identificador del shipment o embarque logístico (ej. '90327449')."
+        required: false
+      - name: trf_do
+        type: string
+        description: "Número de transferencia u orden de entrega Delivery Order (ej. '22796787', '22798429')."
+        required: false
+    statement: |
+      SELECT 
+          tim,
+          Shipment,
+          Trf_DO,
+          Tipo_DO,
+          Placa,
+          Tienda,
+          Nombre_Tienda,
+          Inventario_Whse,
+          DATE(Fecha_Enviado) AS fecha_despacho,
+          COUNT(DISTINCT sku) AS total_skus,
+          ROUND(SUM(Unidades), 0) AS total_unidades,
+          ROUND(SUM(Cajas), 0) AS total_cajas,
+          ROUND(SUM(Peso_Total), 2) AS peso_total_kg
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND (@shipment IS NULL OR @shipment = '' OR CAST(Shipment AS STRING) = @shipment)
+        AND (@trf_do IS NULL OR @trf_do = '' OR CAST(Trf_DO AS STRING) = @trf_do)
+      GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+      LIMIT 20;
+
+  # ----------------------------------------------------
+  # HERRAMIENTA 6: Búsqueda y Resolución de Tiendas por Nombre
+  # ----------------------------------------------------
+  buscar_tienda_por_nombre:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Busca tiendas de Tottus por coincidencia parcial de su nombre comercial
+      (ej. 'Huanuco', 'San Luis', 'Angamos', 'Megaplaza') para obtener su código numérico ID de tienda.
+    parameters:
+      - name: nombre_parcial
+        type: string
+        description: "Nombre o palabra clave del local/tienda a buscar (ej. 'Huanuco', 'San Luis', 'Angamos')."
+        required: true
+    statement: |
+      SELECT 
+          Tienda AS tienda_id,
+          Nombre_Tienda,
+          COUNT(DISTINCT tim) AS total_despachos_recientes,
+          MAX(Fecha_Enviado) AS ultimo_despacho_registrado
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+        AND LOWER(Nombre_Tienda) LIKE CONCAT('%', LOWER(@nombre_parcial), '%')
+      GROUP BY Tienda, Nombre_Tienda
+      ORDER BY total_despachos_recientes DESC
+      LIMIT 10;
+
 # ==========================================
 # 3. REGISTRO EN EL TOOLSET
 # ==========================================
@@ -192,3 +277,5 @@ toolsets:
     - resumen_carga_transporte
     - resumen_despachos_por_division
     - alertas_vencimiento_transito
+    - buscar_por_shipment_o_do
+    - buscar_tienda_por_nombre
