@@ -58,13 +58,13 @@ class LogisticaAgent:
     async def _generate_content_with_retry(self, client, contents, config, primary_model: str):
         """
         Ejecuta generate_content con reintentos exponenciales y failover transparente
-        entre modelos ante picos de demanda (503).
+        entre modelos ante picos de demanda (503 / 429) o micro-cortes de conexión.
         """
         models_to_try = [primary_model]
         if settings.USE_VERTEXAI:
-            fallbacks = ["gemini-2.5-flash", "gemini-1.5-flash"]
+            fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash"]
         else:
-            fallbacks = ["gemini-3.5-flash-lite", "gemini-flash-latest"]
+            fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
         for alt in fallbacks:
             if alt not in models_to_try:
@@ -88,12 +88,13 @@ class LogisticaAgent:
                 except Exception as e:
                     last_error = e
                     err_msg = str(e)
-                    if "503" in err_msg or "UNAVAILABLE" in err_msg or "429" in err_msg:
-                        logger.warning(f"⚠️ [{model_name}] Alta demanda temporal en Google (503). Reintentando en 1.5s...")
-                        await asyncio.sleep(1.5)
+                    es_reintentable = any(x in err_msg for x in ["503", "UNAVAILABLE", "429", "10054", "ConnectionReset", "RemoteDisconnected", "timeout"])
+                    if es_reintentable and attempt == 0:
+                        logger.warning(f"⚠️ [{model_name}] Demanda de Google o micro-corte de red ({err_msg[:60]}). Reintentando en 1s...")
+                        await asyncio.sleep(1.0)
                         continue
                     else:
-                        raise e
+                        break  # Pasar inmediatamente al siguiente modelo fallback
 
         raise last_error
 
@@ -370,12 +371,13 @@ class LogisticaAgent:
             else:
                 logger.error(f"Error durante el ciclo de Gemini: {e}", exc_info=True)
             
-            return await self._fallback_deterministic_execution(user_prompt, session_id, error_detail=err_str, include_data=include_data)
+            return await self._fallback_deterministic_execution(user_prompt, session_id, tienda_id=tienda_id, error_detail=err_str, include_data=include_data)
 
     async def _fallback_deterministic_execution(
         self,
         user_prompt: str,
         session_id: str,
+        tienda_id: Optional[str] = None,
         error_detail: Optional[str] = None,
         include_data: bool = False
     ) -> ChatResponse:
@@ -393,8 +395,156 @@ class LogisticaAgent:
         placa_match = re.search(r'placa\s*[:#]?\s*([A-Za-z0-9-]+)', user_prompt, re.I)
         placa_val = placa_match.group(1).upper() if placa_match else None
         
-        # 1. Consulta de Placa, Camión, Transporte o Consolidado de Carga
+        # 0. Saludo o solicitud de ayuda general
+        es_saludo = bool(re.search(r'\b(hola|buen(?:os)?\s*(?:d[ií]as|tardes|noches)|saludos?|ayuda|ayudarme|puedes ayudarme|qu[eé] haces|qu[eé] puedes hacer|c[oó]mo funcionas?)\b', user_prompt, re.I))
+        if es_saludo and not (tim_val or placa_val):
+            return ChatResponse(
+                answer=(
+                    "¡Hola! Con mucho gusto. Soy tu **Asistente de Transporte y Despachos de Tottus Perú** 🇵🇪.\n\n"
+                    "Puedo asistirte en tiempo real con las operaciones logísticas del Centro de Distribución y Tiendas:\n\n"
+                    "- 🚛 **Camiones y Transportes:** Saber qué camiones fueron a una tienda en una fecha específica (ej. *'¿Qué camión fue a Angamos el 26.09?'*).\n"
+                    "- 📋 **Detalle de Transferencias (TIM):** Conocer los productos despachados usando el número de TIM (ej. *'Productos del TIM 655423616'*).\n"
+                    "- 📦 **Consolidado de Carga:** Ver el total de cajas, unidades, peso y volumen de un camión o placa.\n"
+                    "- 🔍 **Rastreo por Shipment o DO:** Rastrear envíos específicos desde los almacenes del CD.\n\n"
+                    "¿Qué consulta te gustaría realizar hoy?"
+                ),
+                session_id=session_id,
+                tools_executed=[],
+                data=None
+            )
+
+        # Detección de Tienda por nombre, código numérico o contexto del dropdown
+        tienda_val = tienda_id
+        tiendas_map = {
+            "angamos": "123",
+            "san luis": "114",
+            "huanuco": "451",
+            "huánuco": "451",
+            "atocongo": "104",
+            "megaplaza": "109"
+        }
+        for nombre, tid in tiendas_map.items():
+            if re.search(r'\b' + re.escape(nombre) + r'\b', user_prompt, re.I):
+                tienda_val = tid
+                break
+        if not tienda_val:
+            tienda_match = re.search(r'\btienda\s*[:#]?\s*(\d{3})\b', user_prompt, re.I)
+            tienda_val = tienda_match.group(1) if tienda_match else None
+
+        # Detección de Fecha (ej. '27.09', '26.09', '26/09', '26-09' o '2026-09-26')
+        fecha_val = None
+        fecha_corta = re.search(r'\b(\d{1,2})[./\-](\d{1,2})\b', user_prompt)
+        if fecha_corta:
+            dia = fecha_corta.group(1).zfill(2)
+            mes = fecha_corta.group(2).zfill(2)
+            fecha_val = f"2026-{mes}-{dia}"
+        else:
+            fecha_iso = re.search(r'\b(202\d-\d{2}-\d{2})\b', user_prompt)
+            if fecha_iso:
+                fecha_val = fecha_iso.group(1)
+
+        # 1. Consulta de Placa, Camión, Transporte, TIM o Despachos generales
         es_consulta_camion = bool(re.search(r'\b(placa|camion|camión|vehiculo|vehículo|carga|transporte|flete|peso|volumen|pallet|cajas?)\b', user_prompt, re.I))
+        es_consulta_logistica = bool(re.search(r'\b(tim|tims|despacho|despachos|transferencia|transferencias|envio|envío|envios|envíos|salida|salidas)\b', user_prompt, re.I))
+        
+        # 1A. Consulta de TIMs, Despachos o Camiones por Fecha (hacia una tienda o general)
+        if (es_consulta_logistica or es_consulta_camion) and fecha_val:
+            args = {"fecha": fecha_val}
+            if tienda_val:
+                args["tienda"] = tienda_val
+
+            rows, exec_log = await self._execute_mcp_tool("resumen_carga_transporte", args, include_data=include_data)
+            if not rows:
+                tienda_info = f" para la tienda **{tienda_val}**" if tienda_val else ""
+                answer = f"ℹ️ Se consultó el sistema central de transporte{tienda_info} para la fecha **{fecha_val}**, pero no se registran transferencias (TIMs) ni despachos en esa fecha."
+            else:
+                lineas_camiones = []
+                total_cajas_dia = 0
+                total_unidades_dia = 0
+                total_peso_dia = 0.0
+                placas_vistas = set()
+                for r in rows:
+                    placa = r.get("Placa", "N/D")
+                    placas_vistas.add(placa)
+                    tim = r.get("tim", "N/D")
+                    whse = r.get("Inventario_Whse", "N/D")
+                    cajas = float(r.get("total_cajas") or 0)
+                    unidades = float(r.get("total_unidades") or 0)
+                    peso = float(r.get("peso_total_kg") or 0)
+                    vol = float(r.get("volumen_total_m3") or 0)
+                    tienda_nombre = r.get("Nombre_Tienda", r.get("Tienda", ""))
+                    total_cajas_dia += cajas
+                    total_unidades_dia += unidades
+                    total_peso_dia += peso
+                    lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {tienda_nombre} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg | {vol:,.2f} m³ |")
+
+                tabla = "\n".join(lineas_camiones[:15])
+                nota_total = f"\n\n*(Mostrando 15 de {len(rows)} transferencias)*" if len(rows) > 15 else ""
+                titulo_tienda = f" — Tienda {rows[0].get('Nombre_Tienda', tienda_val)}" if tienda_val else ""
+
+                answer = (
+                    f"### 📋 Transferencias y Despachos (TIMs){titulo_tienda}\n\n"
+                    f"- 📅 **Fecha:** **{fecha_val}**\n"
+                    f"- 🚛 **Camiones Identificados:** **{len(placas_vistas)} vehículos físicos** ({len(rows)} transferencias/TIMs)\n"
+                    f"- 📦 **Carga Total:** {total_cajas_dia:,.0f} cajas | {total_unidades_dia:,.0f} unidades | {total_peso_dia:,.2f} kg\n\n"
+                    f"| PLACA | TIM | CD ORIGEN | DESTINO | CAJAS | UNIDADES | PESO TOTAL | VOLUMEN |\n"
+                    f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                    f"{tabla}{nota_total}\n\n"
+                    f"*(Información verificada en el catálogo central de transportes Tottus)*"
+                )
+            return ChatResponse(
+                answer=answer,
+                session_id=session_id,
+                tools_executed=[exec_log],
+                data=rows if (include_data and rows) else None
+            )
+
+        # 1B. Consulta de Camiones hacia una Tienda sin fecha puntual
+        if es_consulta_camion and tienda_val:
+            args = {"tienda": tienda_val}
+            rows, exec_log = await self._execute_mcp_tool("resumen_carga_transporte", args, include_data=include_data)
+            if not rows:
+                answer = f"ℹ️ Se consultó el sistema de transporte para la tienda **{tienda_val}**, pero no se encontraron despachos registrados en los últimos 60 días."
+            else:
+                lineas_camiones = []
+                total_cajas_dia = 0
+                total_unidades_dia = 0
+                total_peso_dia = 0.0
+                placas_vistas = set()
+                for r in rows:
+                    placa = r.get("Placa", "N/D")
+                    placas_vistas.add(placa)
+                    tim = r.get("tim", "N/D")
+                    whse = r.get("Inventario_Whse", "N/D")
+                    cajas = float(r.get("total_cajas") or 0)
+                    unidades = float(r.get("total_unidades") or 0)
+                    peso = float(r.get("peso_total_kg") or 0)
+                    vol = float(r.get("volumen_total_m3") or 0)
+                    total_cajas_dia += cajas
+                    total_unidades_dia += unidades
+                    total_peso_dia += peso
+                    lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg | {vol:,.2f} m³ |")
+
+                tabla = "\n".join(lineas_camiones[:10])
+                nombre_tienda = rows[0].get("Nombre_Tienda", tienda_val)
+
+                answer = (
+                    f"### 🚚 Despacho de Camiones — Tienda {nombre_tienda} ({tienda_val})\n\n"
+                    f"- 🚛 **Camiones Identificados:** **{len(placas_vistas)} vehículos físicos** ({len(rows)} transferencias/TIMs)\n"
+                    f"- 📦 **Carga Total:** {total_cajas_dia:,.0f} cajas | {total_unidades_dia:,.0f} unidades | {total_peso_dia:,.2f} kg\n\n"
+                    f"| PLACA | TIM | CD ORIGEN | CAJAS | UNIDADES | PESO TOTAL | VOLUMEN |\n"
+                    f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                    f"{tabla}\n\n"
+                    f"*(Información verificada en el catálogo central de transportes Tottus)*"
+                )
+            return ChatResponse(
+                answer=answer,
+                session_id=session_id,
+                tools_executed=[exec_log],
+                data=rows if (include_data and rows) else None
+            )
+
+        # 1B. Consulta de Camión por TIM o Placa puntual
         if (es_consulta_camion and (tim_val or placa_val)) or placa_val:
             args = {}
             if tim_val:
@@ -525,8 +675,8 @@ class LogisticaAgent:
 
         return ChatResponse(
             answer=(
-                f"No pude interpretar la consulta directamente o el servicio de IA reportó: {error_detail or 'Configuración requerida'}. "
-                "Por favor especifica un número de TIM (ej. '655423616'), placa de camión o Shipment para consultar los datos."
+                "El servicio de inteligencia operativa se encuentra procesando un volumen alto de consultas en este momento. "
+                "Para consultar directamente los datos de despacho, por favor especifica un número de **TIM** (ej. `'655423616'`), **placa de camión** o nombre de **tienda** (ej. *Angamos*, *San Luis*)."
             ),
             session_id=session_id,
             tools_executed=[],
