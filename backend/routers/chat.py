@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["Logística & Chat"])
 async def chat_endpoint(request: ChatRequest) -> ChatResponse:
     """
     Endpoint principal para interactuar con el agente en lenguaje natural.
-    Gemini 2.5 Flash evalúa la pregunta, consulta BigQuery vía Toolbox MCP si es necesario,
+    Gemini 3.5 Flash-Lite evalúa la pregunta, consulta BigQuery vía Toolbox MCP si es necesario,
     y devuelve la síntesis analítica junto con la tabla de datos estructurados.
     """
     session_id = request.session_id or f"session_{uuid.uuid4().hex[:8]}"

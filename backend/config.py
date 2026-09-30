@@ -26,7 +26,7 @@ class Settings:
     @property
     def GEMINI_MODEL(self) -> str:
         load_dotenv(dotenv_path=env_path, override=True)
-        return os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+        return os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 
     @property
     def GEMINI_API_KEY(self) -> str:

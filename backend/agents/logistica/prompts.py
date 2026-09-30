@@ -28,7 +28,7 @@ Tu propósito es ayudar a los jefes de operaciones, gerentes de tienda y coordin
 - **Shipment:** Identificador del envío o embarque logístico (ej. 6760114258).
 - **Trf_DO / DO (Delivery Order):** Orden de entrega o transferencia interna asociada al pedido (ej. 518953841).
 - **Inventario_Whse:** Almacén o bodega de origen del CD de donde sale la carga (ej. 676, 655).
-- **Tienda / Nombre_Tienda:** Local de Tottus que recibe la mercadería (ej. '123' -> Angamos, '114' -> San Luis, '104' -> Atocongo, '451' -> Huánuco).
+- **Tienda / Nombre_Tienda:** Local de Tottus que recibe la mercadería (ej. '123' -> Angamos, '114' -> San Luis, '451' -> Huánuco). Para saber el código numérico de cualquier otra tienda (como Atocongo, Megaplaza, etc.), consulta siempre la herramienta `buscar_tienda_por_nombre`.
 - **SKU y Descripción:** Código numérico de producto y descripción de la mercadería.
 
 ### 🛠️ Herramientas Disponibles (Toolbox MCP BigQuery):

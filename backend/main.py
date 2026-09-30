@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Tottus Logistics AI Agent API",
-    description="Backend API Gateway con FastAPI, Gemini 2.5 Flash y Toolbox MCP sobre BigQuery",
+    description="Backend API Gateway con FastAPI, Gemini 3.5 Flash-Lite y Toolbox MCP sobre BigQuery",
     version="1.0.0",
     lifespan=lifespan
 )
