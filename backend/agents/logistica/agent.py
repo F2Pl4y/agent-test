@@ -453,8 +453,9 @@ class LogisticaAgent:
         placa_match = re.search(r'placa\s*[:#]?\s*([A-Za-z0-9-]+)', user_prompt, re.I)
         placa_val = placa_match.group(1).upper() if placa_match else None
         
-        # 0. Saludo o solicitud de ayuda general
-        es_saludo = bool(re.search(r'\b(hola|buen(?:os)?\s*(?:d[ií]as|tardes|noches)|saludos?|ayuda|ayudarme|puedes ayudarme|qu[eé] haces|qu[eé] puedes hacer|c[oó]mo funcionas?)\b', user_prompt, re.I))
+        # 0. Saludo o solicitud de ayuda general (excluye si incluye preguntas explícitas de cálculo matemático o ajenas)
+        es_pregunta_ajena = bool(re.search(r'\b(sumar?|restar?|multiplicar?|dividir?|calcular|calculadora|chiste|cuento|poema)\b', user_prompt, re.I))
+        es_saludo = bool(re.search(r'\b(hola|buen(?:os)?\s*(?:d[ií]as|tardes|noches)|saludos?|ayuda|ayudarme|puedes ayudarme|qu[eé] haces|qu[eé] puedes hacer|c[oó]mo funcionas?)\b', user_prompt, re.I)) and not es_pregunta_ajena
         if es_saludo and not (tim_val or placa_val):
             if error_detail:
                 saludo_texto = (
@@ -502,21 +503,29 @@ class LogisticaAgent:
             tienda_match = re.search(r'\btienda\s*[:#]?\s*(\d{3})\b', user_prompt, re.I)
             tienda_val = tienda_match.group(1) if tienda_match else None
 
-        # Detección de Fecha (ej. '27.09', '26.09', '26/09', '26-09' o '2026-09-26')
+        # Detección de Fecha (ej. 'ayer', 'hoy', '27.09', '26.09', '26/09', '26-09' o '2026-09-26')
         fecha_val = None
-        fecha_corta = re.search(r'\b(\d{1,2})[./\-](\d{1,2})\b', user_prompt)
-        if fecha_corta:
-            dia = fecha_corta.group(1).zfill(2)
-            mes = fecha_corta.group(2).zfill(2)
-            fecha_val = f"2026-{mes}-{dia}"
+        if re.search(r'\bayer\b', user_prompt, re.I):
+            from datetime import date, timedelta
+            fecha_val = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        elif re.search(r'\bhoy\b', user_prompt, re.I):
+            from datetime import date
+            fecha_val = date.today().strftime("%Y-%m-%d")
         else:
-            fecha_iso = re.search(r'\b(202\d-\d{2}-\d{2})\b', user_prompt)
-            if fecha_iso:
-                fecha_val = fecha_iso.group(1)
+            fecha_corta = re.search(r'\b(\d{1,2})[./\-](\d{1,2})\b', user_prompt)
+            if fecha_corta:
+                dia = fecha_corta.group(1).zfill(2)
+                mes = fecha_corta.group(2).zfill(2)
+                fecha_val = f"2026-{mes}-{dia}"
+            else:
+                fecha_iso = re.search(r'\b(202\d-\d{2}-\d{2})\b', user_prompt)
+                if fecha_iso:
+                    fecha_val = fecha_iso.group(1)
 
         # 1. Consulta de Placa, Camión, Transporte, TIM o Despachos generales
-        es_consulta_camion = bool(re.search(r'\b(placa|camion|camión|vehiculo|vehículo|carga|transporte|flete|peso|volumen|pallet|cajas?)\b', user_prompt, re.I))
+        es_consulta_camion = bool(re.search(r'\b(placa|placas|camion|camión|camiones|vehiculo|vehículo|vehiculos|vehículos|carga|transporte|transportes|flete|peso|volumen|pallet|pallets|cajas?)\b', user_prompt, re.I))
         es_consulta_logistica = bool(re.search(r'\b(tim|tims|despacho|despachos|transferencia|transferencias|envio|envío|envios|envíos|salida|salidas)\b', user_prompt, re.I))
+        es_consulta_productos = bool(re.search(r'\b(productos?|mercader[ií]a|art[ií]culos?|skus?|items?|contenido)\b', user_prompt, re.I))
         
         # 1A. Consulta de TIMs, Despachos o Camiones por Fecha (hacia una tienda o general)
         if (es_consulta_logistica or es_consulta_camion) and fecha_val:
@@ -563,8 +572,6 @@ class LogisticaAgent:
                     f"{tabla}{nota_total}\n\n"
                     f"*(Información verificada en el catálogo central de transportes Tottus)*"
                 )
-            if contingency_banner:
-                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -610,8 +617,6 @@ class LogisticaAgent:
                     f"{tabla}\n\n"
                     f"*(Información verificada en el catálogo central de transportes Tottus)*"
                 )
-            if contingency_banner:
-                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -619,7 +624,65 @@ class LogisticaAgent:
                 data=rows if (include_data and rows) else None
             )
 
-        # 1B. Consulta de Camión por TIM o Placa puntual
+        # 1C. Consulta Compuesta: Camión Y Productos para un TIM simultáneamente
+        if tim_val and es_consulta_camion and es_consulta_productos:
+            rows_camion, exec_camion = await self._execute_mcp_tool("resumen_carga_transporte", {"tim": tim_val}, include_data=include_data)
+            rows_prod, exec_prod = await self._execute_mcp_tool("consultar_despachos_logistica", {"tim": tim_val}, include_data=include_data)
+
+            if not rows_camion and not rows_prod:
+                answer = f"ℹ️ Se consultó el sistema para el TIM **{tim_val}**, pero no se encontraron registros de transporte ni productos en los últimos 60 días."
+            else:
+                bloque_camion = ""
+                if rows_camion:
+                    r = rows_camion[0]
+                    placa = r.get('Placa') or 'No registrada / En asignación'
+                    tienda = f"{r.get('Nombre_Tienda', '')} ({r.get('Tienda', '')})"
+                    fecha = r.get('fecha_despacho', 'N/D')
+                    whse = r.get('Inventario_Whse', 'N/D')
+                    cajas = float(r.get('total_cajas') or 0)
+                    unidades = float(r.get('total_unidades') or 0)
+                    peso = float(r.get('peso_total_kg') or 0)
+                    vol = float(r.get('volumen_total_m3') or 0)
+                    bloque_camion = (
+                        f"### 🚛 Información de Transporte y Camión\n\n"
+                        f"- 🚚 **Placa del Camión:** **`{placa}`**\n"
+                        f"- 📋 **TIM Asociado:** `{tim_val}`\n"
+                        f"- 🏪 **Tienda Destino:** {tienda}\n"
+                        f"- 🏭 **Almacén Origen (Whse):** {whse}\n"
+                        f"- 📅 **Fecha de Despacho:** **{fecha}**\n\n"
+                        f"#### 📦 Consolidado de Carga:\n"
+                        f"- **Cajas:** {cajas:,.0f} | **Unidades:** {unidades:,.0f} | **Peso:** {peso:,.2f} kg | **Volumen:** {vol:,.2f} m³\n\n"
+                    )
+
+                bloque_prod = ""
+                if rows_prod:
+                    filas_tabla = []
+                    for r in rows_prod[:10]:
+                        sku = r.get('sku', '')
+                        desc = (r.get('Descripcion') or '')[:35]
+                        do = r.get('Trf_DO', '')
+                        tipo = r.get('Tipo_DO', '')
+                        filas_tabla.append(f"| `{sku}` | {desc} | `{do}` | {tipo} |")
+                    tabla_md = "\n".join(filas_tabla)
+                    nota_total = f"\n*(Mostrando los primeros 10 de **{len(rows_prod)} productos** devueltos)*" if len(rows_prod) > 10 else ""
+                    bloque_prod = (
+                        f"### 📋 Detalle de Mercadería y Productos (TIM `{tim_val}`)\n\n"
+                        f"| SKU | Descripción | DO / Transferencia | Tipo |\n"
+                        f"| :--- | :--- | :--- | :--- |\n"
+                        f"{tabla_md}{nota_total}\n\n"
+                    )
+
+                nota_compuesta = "> ℹ️ **Consulta Compuesta Atendida:** Se procesó la consulta múltiple de camión asignado y lista de productos para esta TIM.\n\n"
+                answer = f"{nota_compuesta}{bloque_camion}{bloque_prod}*(Información verificada en el catálogo central de transportes Tottus)*"
+
+            return ChatResponse(
+                answer=answer,
+                session_id=session_id,
+                tools_executed=[exec_camion, exec_prod],
+                data=(rows_prod or rows_camion) if include_data else None
+            )
+
+        # 1D. Consulta de Camión por TIM o Placa puntual
         if (es_consulta_camion and (tim_val or placa_val)) or placa_val:
             args = {}
             if tim_val:
@@ -660,8 +723,6 @@ class LogisticaAgent:
                     f"- **Peso Total:** {peso:,.2f} kg\n"
                     f"- **Volumen Total:** {vol:,.2f} m³\n"
                 )
-            if contingency_banner:
-                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -703,8 +764,6 @@ class LogisticaAgent:
                     f"{tabla_md}{nota_total}\n"
                 )
             
-            if contingency_banner:
-                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -745,8 +804,6 @@ class LogisticaAgent:
                     f"- **Total Unidades:** {unidades}\n"
                     f"- **Peso Total:** {peso:,.2f} kg\n"
                 )
-            if contingency_banner:
-                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
