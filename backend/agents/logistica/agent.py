@@ -98,6 +98,55 @@ class LogisticaAgent:
 
         raise last_error
 
+    def _parse_gemini_error(self, err_str: Optional[str]) -> Tuple[str, str]:
+        """
+        Interpreta el error técnico devuelto por Google GenAI / Gemini / Red y
+        devuelve:
+        1. Código o tipo de error corto (ej: '500', '404', '403', '429', 'Conexión')
+        2. Mensaje amigable y empático indicando entre paréntesis el tipo/código de error.
+        """
+        if not err_str:
+            return ("Desconocido", "No se pudo procesar tu respuesta debido a una interrupción en el servicio de IA (Error Desconocido).")
+
+        raw = err_str.lower()
+
+        # 1. Error 500 (Internal Server Error)
+        if "500" in err_str or "internal" in raw:
+            return ("500", "No se pudo procesar tu respuesta debido a un error con el servidor (500).")
+
+        # 2. Error 503 (Service Unavailable / Sobrecarga)
+        if "503" in err_str or "unavailable" in raw:
+            return ("503", "No se pudo procesar tu respuesta debido a que el servidor de IA se encuentra temporalmente fuera de línea o saturado (503).")
+
+        # 3. Error 404 (Not Found / Modelo no encontrado)
+        if "404" in err_str or "not_found" in raw or "not found" in raw:
+            return ("404", "No se pudo procesar tu respuesta debido a que el modelo o recurso de IA solicitado no fue encontrado en el servidor (404).")
+
+        # 4. Error 403 / 401 (Permission Denied / Unauthorized)
+        if "403" in err_str or "401" in err_str or "permission_denied" in raw or "unauthorized" in raw or "permission denied" in raw:
+            return ("403", "No se pudo procesar tu respuesta debido a un problema de permisos o credenciales con el servidor de IA (403).")
+
+        # 5. Error 429 (Too Many Requests / Cuota agotada)
+        if "429" in err_str or "resource_exhausted" in raw or "quota" in raw:
+            return ("429", "No se pudo procesar tu respuesta debido a que se alcanzó el límite temporal de consultas en el servidor (429).")
+
+        # 6. Error 400 (Bad Request / Argumento inválido)
+        if "400" in err_str or "invalid_argument" in raw or "bad request" in raw:
+            return ("400", "No se pudo procesar tu respuesta debido a que la solicitud no tiene un formato válido para el servidor de IA (400).")
+
+        # 7. Problemas de red, corte de conexión o timeouts
+        if any(w in raw for w in ["timeout", "timed out", "connection", "remote", "10054", "reset", "refused", "desconectado"]):
+            return ("Conexión", "No se pudo procesar tu respuesta debido a una interrupción en la conexión de red con el servidor (Error de Conexión).")
+
+        # 8. Extraer código HTTP numérico si existe en el texto
+        code_match = re.search(r'\b(4\d{2}|5\d{2})\b', err_str)
+        if code_match:
+            code = code_match.group(1)
+            return (code, f"No se pudo procesar tu respuesta debido a un error con el servidor ({code}).")
+
+        # 9. Fallback general
+        return ("Servicio IA", "No se pudo procesar tu respuesta debido a una incidencia en la comunicación con el servidor de inteligencia artificial (Error de Servicio).")
+
     def _build_tools_declaration(self) -> list:
         """Construye las declaraciones de funciones (OpenAPI/MCP) para Gemini."""
         from google.genai import types
@@ -216,7 +265,13 @@ class LogisticaAgent:
 
         # Si no hay cliente de IA configurado aún, aplicamos fallback heurístico inteligente
         if not client:
-            return await self._fallback_deterministic_execution(user_prompt, session_id, include_data=include_data)
+            return await self._fallback_deterministic_execution(
+                user_prompt, 
+                session_id, 
+                tienda_id=tienda_id, 
+                error_detail="No se pudo inicializar el cliente de IA (Credenciales o configuración no encontradas)", 
+                include_data=include_data
+            )
 
         try:
             from google.genai import types
@@ -388,6 +443,9 @@ class LogisticaAgent:
         """
         logger.info("⚡ Ejecutando consulta heurística directa vía Toolbox MCP...")
         
+        err_code, err_friendly = self._parse_gemini_error(error_detail)
+        contingency_banner = f"> ⚠️ **Modo de contingencia activo:** {err_friendly} Se procedió a consultar directamente la base de datos de transportes." if error_detail else ""
+
         tim_match = re.search(r'\b(655\d{6}|\d{8,10})\b', user_prompt)
         tim_val = int(tim_match.group(1)) if tim_match else None
         
@@ -398,8 +456,19 @@ class LogisticaAgent:
         # 0. Saludo o solicitud de ayuda general
         es_saludo = bool(re.search(r'\b(hola|buen(?:os)?\s*(?:d[ií]as|tardes|noches)|saludos?|ayuda|ayudarme|puedes ayudarme|qu[eé] haces|qu[eé] puedes hacer|c[oó]mo funcionas?)\b', user_prompt, re.I))
         if es_saludo and not (tim_val or placa_val):
-            return ChatResponse(
-                answer=(
+            if error_detail:
+                saludo_texto = (
+                    f"¡Hola! Con mucho gusto. Soy tu **Asistente de Transporte y Despachos de Tottus Perú** 🇵🇪.\n\n"
+                    f"> ℹ️ **Estado del Asistente:** {err_friendly}\n\n"
+                    "Para mantener la continuidad operativa, se encuentra habilitado el **Modo de Contingencia Directa** conectado a la base de datos de transportes:\n\n"
+                    "- 🚛 **Camiones y Transportes:** Saber qué camiones fueron a una tienda en una fecha específica (ej. *'¿Qué camión fue a Angamos el 26.09?'*).\n"
+                    "- 📋 **Detalle de Transferencias (TIM):** Conocer los productos despachados usando el número de TIM (ej. *'Productos del TIM 655423616'*).\n"
+                    "- 📦 **Consolidado de Carga:** Ver el total de cajas, unidades, peso y volumen de un camión o placa.\n"
+                    "- 🔍 **Rastreo por Shipment o DO:** Rastrear envíos específicos desde los almacenes del CD.\n\n"
+                    "¿Qué consulta te gustaría realizar hoy?"
+                )
+            else:
+                saludo_texto = (
                     "¡Hola! Con mucho gusto. Soy tu **Asistente de Transporte y Despachos de Tottus Perú** 🇵🇪.\n\n"
                     "Puedo asistirte en tiempo real con las operaciones logísticas del Centro de Distribución y Tiendas:\n\n"
                     "- 🚛 **Camiones y Transportes:** Saber qué camiones fueron a una tienda en una fecha específica (ej. *'¿Qué camión fue a Angamos el 26.09?'*).\n"
@@ -407,7 +476,9 @@ class LogisticaAgent:
                     "- 📦 **Consolidado de Carga:** Ver el total de cajas, unidades, peso y volumen de un camión o placa.\n"
                     "- 🔍 **Rastreo por Shipment o DO:** Rastrear envíos específicos desde los almacenes del CD.\n\n"
                     "¿Qué consulta te gustaría realizar hoy?"
-                ),
+                )
+            return ChatResponse(
+                answer=saludo_texto,
                 session_id=session_id,
                 tools_executed=[],
                 data=None
@@ -492,6 +563,8 @@ class LogisticaAgent:
                     f"{tabla}{nota_total}\n\n"
                     f"*(Información verificada en el catálogo central de transportes Tottus)*"
                 )
+            if contingency_banner:
+                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -537,6 +610,8 @@ class LogisticaAgent:
                     f"{tabla}\n\n"
                     f"*(Información verificada en el catálogo central de transportes Tottus)*"
                 )
+            if contingency_banner:
+                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -585,6 +660,8 @@ class LogisticaAgent:
                     f"- **Peso Total:** {peso:,.2f} kg\n"
                     f"- **Volumen Total:** {vol:,.2f} m³\n"
                 )
+            if contingency_banner:
+                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -626,6 +703,8 @@ class LogisticaAgent:
                     f"{tabla_md}{nota_total}\n"
                 )
             
+            if contingency_banner:
+                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -666,6 +745,8 @@ class LogisticaAgent:
                     f"- **Total Unidades:** {unidades}\n"
                     f"- **Peso Total:** {peso:,.2f} kg\n"
                 )
+            if contingency_banner:
+                answer = f"{contingency_banner}\n\n{answer}"
             return ChatResponse(
                 answer=answer,
                 session_id=session_id,
@@ -673,11 +754,24 @@ class LogisticaAgent:
                 data=rows if (include_data and rows) else None
             )
 
+        if error_detail:
+            answer = (
+                f"⚠️ **Aviso de Operación en Contingencia**\n\n"
+                f"{err_friendly}\n\n"
+                f"El **modo de contingencia directa** se encuentra activo. En este modo de respaldo el asistente no cuenta con razonamiento conversacional ni puede realizar cálculos u operaciones ajenas al despacho (como sumas o preguntas generales).\n\n"
+                f"Para consultar información operativa directamente en el sistema de transporte, por favor especifica:\n"
+                f"- Un número de **TIM** (ej. `'655423616'`)\n"
+                f"- Una **placa de camión** (ej. `'AJZ-981'`)\n"
+                f"- Nombre de **tienda** y **fecha** (ej. *Angamos el 26.09*)"
+            )
+        else:
+            answer = (
+                "Para consultar directamente los datos de despacho, por favor especifica un número de **TIM** (ej. `'655423616'`), "
+                "**placa de camión** o nombre de **tienda** y **fecha** (ej. *Angamos el 26.09*)."
+            )
+
         return ChatResponse(
-            answer=(
-                "El servicio de inteligencia operativa se encuentra procesando un volumen alto de consultas en este momento. "
-                "Para consultar directamente los datos de despacho, por favor especifica un número de **TIM** (ej. `'655423616'`), **placa de camión** o nombre de **tienda** (ej. *Angamos*, *San Luis*)."
-            ),
+            answer=answer,
             session_id=session_id,
             tools_executed=[],
             data=None

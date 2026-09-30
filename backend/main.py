@@ -64,6 +64,12 @@ if front_path.exists():
 # Registrar las rutas del API
 app.include_router(chat_router)
 
+from fastapi.responses import Response
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(content=b"", media_type="image/x-icon")
+
 @app.get("/", tags=["General"])
 async def root():
     if front_path.exists():
