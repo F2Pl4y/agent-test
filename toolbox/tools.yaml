@@ -103,33 +103,59 @@ tools:
         type: string
         description: "Fecha específica de despacho en formato YYYY-MM-DD (ej. '2026-09-26'). Opcional."
         required: false
+      - name: pagina
+        type: integer
+        description: "Número de página a consultar (1 para filas 1-50, 2 para filas 51-100, etc.). Opcional."
+        required: false
     statement: |
+      WITH datos AS (
+        SELECT 
+            tim,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            DATE(Fecha_Enviado) AS fecha_despacho,
+            COUNT(DISTINCT Pallet) AS total_pallets,
+            COUNT(DISTINCT sku) AS total_skus_distintos,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+            ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+          AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
+          AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
+          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
+          AND (
+            @fecha IS NULL OR @fecha = '' 
+            OR CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
+            OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
+          )
+        GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+      ),
+      numerados AS (
+        SELECT 
+            *,
+            ROW_NUMBER() OVER(ORDER BY fecha_despacho DESC, total_cajas DESC) AS num_fila
+        FROM datos
+      )
       SELECT 
           tim,
           Placa,
           Tienda,
           Nombre_Tienda,
           Inventario_Whse,
-          DATE(Fecha_Enviado) AS fecha_despacho,
-          COUNT(DISTINCT Pallet) AS total_pallets,
-          COUNT(DISTINCT sku) AS total_skus_distintos,
-          ROUND(SUM(Unidades), 0) AS total_unidades,
-          ROUND(SUM(Cajas), 0) AS total_cajas,
-          ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
-          ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
-        AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
-        AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
-        AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
-        AND (
-          @fecha IS NULL OR @fecha = '' 
-          OR CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
-          OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
-        )
-      GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
-      ORDER BY fecha_despacho DESC, total_cajas DESC
-      LIMIT 5000;
+          fecha_despacho,
+          total_pallets,
+          total_skus_distintos,
+          total_unidades,
+          total_cajas,
+          peso_total_kg,
+          volumen_total_m3
+      FROM numerados
+      WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
+      ORDER BY num_fila;
 
   # ----------------------------------------------------
   # HERRAMIENTA 3: Despachos agregados por División Comercial (J01 a J11)

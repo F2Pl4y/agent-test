@@ -140,13 +140,27 @@ class ToolboxMCPClient:
                         pass
                 return rows
 
-        if fetch_all_pages and tool_name == "consultar_despachos_logistica":
-            # Descargar la totalidad de registros sin tope de páginas
-            # Al no enviar el parámetro 'pagina', BigQuery evalúa (@pagina IS NULL) y retorna todas las filas (hasta 5,000)
-            # en una única consulta instantánea, asegurando que el Excel / CSV contenga el 100% de la información.
-            all_args = dict(clean_args)
-            all_args.pop("pagina", None)
-            final_rows = await _call_single_page(all_args)
+        tools_with_pagination = ("consultar_despachos_logistica", "resumen_carga_transporte")
+        should_fetch_all = fetch_all_pages or (tool_name in tools_with_pagination and "pagina" not in clean_args)
+
+        if should_fetch_all and tool_name in tools_with_pagination:
+            # Descargar todas las páginas secuencialmente para superar el límite de 50 filas de Toolbox MCP
+            logger.info(f"🔄 [Multi-Page Auto Fetch] Descargando todas las páginas para '{tool_name}'...")
+            all_rows = []
+            page = 1
+            max_pages = 100  # Soporta hasta 5,000 registros completos
+            while page <= max_pages:
+                page_args = dict(clean_args)
+                page_args["pagina"] = page
+                batch = await _call_single_page(page_args)
+                if not batch:
+                    break
+                all_rows.extend(batch)
+                if len(batch) < 50:
+                    break
+                page += 1
+            logger.info(f"✅ [Multi-Page Auto Fetch] Finalizado: {len(all_rows)} registros totales en {page} páginas para '{tool_name}'.")
+            final_rows = all_rows
         else:
             final_rows = await _call_single_page(clean_args)
 

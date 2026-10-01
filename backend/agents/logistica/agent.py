@@ -20,6 +20,8 @@ class LogisticaAgent:
     def __init__(self):
         self._genai_client = None
         self._client_mode = None
+        self._session_history: Dict[str, list] = {}
+        self._session_last_tienda: Dict[str, str] = {}
 
     def _get_client(self):
         """Inicializa el cliente de Google GenAI (Vertex AI o API Key)."""
@@ -287,9 +289,9 @@ class LogisticaAgent:
             logger.info(f"🔄 Redirigiendo consulta de tienda ({clean_args.get('tienda')}) a 'resumen_carga_transporte' para devolver la lista de TIMs consolidadas")
             canonical_name = "resumen_carga_transporte"
 
-        # Si la herramienta es consultar_despachos_logistica:
-        # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que BigQuery traiga todos los registros.
-        if canonical_name == "consultar_despachos_logistica":
+        # Si la herramienta soporta paginación:
+        # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que se traigan todas las páginas completas.
+        if canonical_name in ("consultar_despachos_logistica", "resumen_carga_transporte"):
             if clean_args.get("pagina") == 1:
                 clean_args.pop("pagina", None)
             fetch_all = ("pagina" not in clean_args)
@@ -342,16 +344,24 @@ class LogisticaAgent:
                 temperature=0.0  # Respuesta determinista y precisa
             )
 
-            prompt_with_context = f"[Contexto de tienda seleccionada: Tienda ID '{tienda_id}']\n{user_prompt}" if tienda_id else user_prompt
+            active_tienda = tienda_id or self._session_last_tienda.get(session_id)
+            if active_tienda:
+                self._session_last_tienda[session_id] = str(active_tienda)
+
+            prompt_with_context = f"[Contexto de sesión: Tienda ID '{active_tienda}']\n{user_prompt}" if active_tienda else user_prompt
 
             # En Google AI Studio la API exige role='user' para respuestas de función; en Vertex AI es 'tool'
             tool_role = "tool" if settings.USE_VERTEXAI else "user"
-            turn_contents = [
+
+            # Cargar historial conversacional previo de la sesión
+            history = list(self._session_history.get(session_id, []))
+            turn_contents = list(history)
+            turn_contents.append(
                 types.Content(role="user", parts=[types.Part.from_text(text=prompt_with_context)])
-            ]
+            )
             final_text = ""
 
-            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (tienda_id={tienda_id})")
+            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (tienda activa={active_tienda}, historial={len(history)} msgs)")
 
             # Bucle de razonamiento multi-paso (hasta 5 rondas de herramientas para razonamiento profundo)
             for round_idx in range(5):
@@ -468,10 +478,27 @@ class LogisticaAgent:
                 else:
                     final_text = "Para la fecha indicada no se registran despachos ni camiones en el sistema de transporte en los últimos 31 días."
 
+            # Recordar tienda si alguna herramienta la utilizó
+            for t in tools_executed:
+                if t.arguments and "tienda" in t.arguments and t.arguments["tienda"]:
+                    self._session_last_tienda[session_id] = str(t.arguments["tienda"])
+
+            # Guardar el intercambio en el historial conversacional de la sesión (máximo 6 turnos)
+            if final_text:
+                new_session_turns = [
+                    types.Content(role="user", parts=[types.Part.from_text(text=prompt_with_context)]),
+                    types.Content(role="model", parts=[types.Part.from_text(text=final_text)])
+                ]
+                current_hist = self._session_history.get(session_id, [])
+                current_hist.extend(new_session_turns)
+                if len(current_hist) > 6:
+                    current_hist = current_hist[-6:]
+                self._session_history[session_id] = current_hist
+
             # Incluir datos si include_data es True o si el usuario solicitó explícitamente tabla/exportación/csv/excel/detalle
             should_include_data = include_data or any(
                 kw in user_prompt.lower() for kw in [
-                    "csv", "excel", "descarga", "exportar", "tabla", "todas", "todos", "lista", "detalle", "filas"
+                    "csv", "excel", "descarga", "exportar", "tabla", "todas", "todos", "lista", "detalle", "filas", "agrupar", "por dia"
                 ]
             )
 
