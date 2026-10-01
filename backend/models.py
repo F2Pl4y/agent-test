@@ -37,3 +37,23 @@ class HealthResponse(BaseModel):
     toolbox_connected: bool
     tools_available: List[str]
     model: str
+
+class SessionSummary(BaseModel):
+    """Resumen de sesión conversacional y trazabilidad de auditoría."""
+    session_id: str
+    created_at: str
+    updated_at: str
+    user_email: Optional[str] = None
+    last_tienda: Optional[str] = None
+    total_turns: int
+
+class SessionDetail(BaseModel):
+    """Detalle completo del resguardo de una sesión conversacional."""
+    session_id: str
+    created_at: str
+    updated_at: str
+    user_email: Optional[str] = None
+    pais: str = "PE"
+    last_tienda: Optional[str] = None
+    total_queries: int
+    turns: List[Dict[str, Any]]

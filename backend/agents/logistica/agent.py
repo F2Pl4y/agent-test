@@ -8,6 +8,7 @@ from backend.config import settings
 from backend.models import ToolExecution, ChatResponse
 from backend.agents._shared.loader import mcp_client
 from backend.agents.logistica.prompts import SYSTEM_INSTRUCTION_LOGISTICA, get_system_instruction_logistica
+from backend.services.session_manager import session_manager
 
 logger = logging.getLogger("backend.agent_logistica")
 
@@ -20,8 +21,6 @@ class LogisticaAgent:
     def __init__(self):
         self._genai_client = None
         self._client_mode = None
-        self._session_history: Dict[str, list] = {}
-        self._session_last_tienda: Dict[str, str] = {}
 
     def _get_client(self):
         """Inicializa el cliente de Google GenAI (Vertex AI o API Key)."""
@@ -313,16 +312,20 @@ class LogisticaAgent:
         user_prompt: str,
         session_id: str = "default_session",
         tienda_id: Optional[str] = None,
-        include_data: bool = False
+        include_data: bool = False,
+        user_email: Optional[str] = None,
+        pais: Optional[str] = "PE"
     ) -> ChatResponse:
         """
-        Flujo principal del agente:
-        1. Recibe la consulta en lenguaje natural.
+        Flujo principal del agente con resguardo y auditoría:
+        1. Sanitiza el session_id para evitar Path Traversal y asegurar persistencia.
         2. Gemini analiza la pregunta e invoca la herramienta MCP adecuada (Function Calling).
         3. Se ejecutan los datos en BigQuery a través de Toolbox.
         4. Gemini sintetiza la respuesta ejecutiva.
-        5. Retorna la respuesta con el texto y las filas estructuradas para el frontend.
+        5. Se resguarda la auditoría completa (pregunta, respuesta, herramientas, métricas) en almacenamiento persistente.
+        6. Retorna la respuesta con el texto y las filas estructuradas para el frontend.
         """
+        safe_session_id = session_manager.sanitize_session_id(session_id)
         client = self._get_client()
         tools_executed: List[ToolExecution] = []
         raw_data: List[Dict[str, Any]] = []
@@ -331,7 +334,7 @@ class LogisticaAgent:
         if not client:
             return self._build_error_response(
                 "No se pudo inicializar el cliente de IA (Credenciales o configuración GEMINI_API_KEY no encontradas).",
-                session_id=session_id
+                session_id=safe_session_id
             )
 
         try:
@@ -344,24 +347,28 @@ class LogisticaAgent:
                 temperature=0.0  # Respuesta determinista y precisa
             )
 
-            active_tienda = tienda_id or self._session_last_tienda.get(session_id)
+            active_tienda = tienda_id or session_manager.get_last_tienda(safe_session_id)
             if active_tienda:
-                self._session_last_tienda[session_id] = str(active_tienda)
+                session_manager.set_last_tienda(safe_session_id, str(active_tienda))
 
             prompt_with_context = f"[Contexto de sesión: Tienda ID '{active_tienda}']\n{user_prompt}" if active_tienda else user_prompt
 
             # En Google AI Studio la API exige role='user' para respuestas de función; en Vertex AI es 'tool'
             tool_role = "tool" if settings.USE_VERTEXAI else "user"
 
-            # Cargar historial conversacional previo de la sesión
-            history = list(self._session_history.get(session_id, []))
-            turn_contents = list(history)
+            # Cargar historial conversacional previo de la sesión (recuperado de disco o memoria)
+            recent_turns = session_manager.get_recent_history_for_llm(safe_session_id, max_turns=6)
+            turn_contents = []
+            for item in recent_turns:
+                turn_contents.append(
+                    types.Content(role=item["role"], parts=[types.Part.from_text(text=item["text"])])
+                )
             turn_contents.append(
                 types.Content(role="user", parts=[types.Part.from_text(text=prompt_with_context)])
             )
             final_text = ""
 
-            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (tienda activa={active_tienda}, historial={len(history)} msgs)")
+            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (sesión={safe_session_id}, tienda={active_tienda}, historial={len(recent_turns)} msgs)")
 
             # Bucle de razonamiento multi-paso (hasta 5 rondas de herramientas para razonamiento profundo)
             for round_idx in range(5):
@@ -481,19 +488,21 @@ class LogisticaAgent:
             # Recordar tienda si alguna herramienta la utilizó
             for t in tools_executed:
                 if t.arguments and "tienda" in t.arguments and t.arguments["tienda"]:
-                    self._session_last_tienda[session_id] = str(t.arguments["tienda"])
+                    active_tienda = str(t.arguments["tienda"])
+                    session_manager.set_last_tienda(safe_session_id, active_tienda)
 
-            # Guardar el intercambio en el historial conversacional de la sesión (máximo 6 turnos)
+            # Resguardar el intercambio en el almacenamiento persistente de auditoría
             if final_text:
-                new_session_turns = [
-                    types.Content(role="user", parts=[types.Part.from_text(text=prompt_with_context)]),
-                    types.Content(role="model", parts=[types.Part.from_text(text=final_text)])
-                ]
-                current_hist = self._session_history.get(session_id, [])
-                current_hist.extend(new_session_turns)
-                if len(current_hist) > 6:
-                    current_hist = current_hist[-6:]
-                self._session_history[session_id] = current_hist
+                session_manager.record_turn(
+                    session_id=safe_session_id,
+                    user_message=user_prompt,
+                    ai_response=final_text,
+                    tools_executed=tools_executed,
+                    records_count=len(raw_data),
+                    tienda_id=active_tienda,
+                    user_email=user_email,
+                    pais=pais
+                )
 
             # Incluir datos si include_data es True o si el usuario solicitó explícitamente tabla/exportación/csv/excel/detalle
             should_include_data = include_data or any(
@@ -504,7 +513,7 @@ class LogisticaAgent:
 
             return ChatResponse(
                 answer=final_text,
-                session_id=session_id,
+                session_id=safe_session_id,
                 tools_executed=tools_executed,
                 data=raw_data if (should_include_data and raw_data) else None
             )
@@ -512,7 +521,19 @@ class LogisticaAgent:
         except Exception as e:
             err_str = str(e)
             logger.error(f"Error durante el ciclo de Gemini: {err_str}", exc_info=True)
-            return self._build_error_response(error_detail=err_str, session_id=session_id)
+            # Resguardo de auditoría ante incidencia
+            session_manager.record_turn(
+                session_id=safe_session_id,
+                user_message=user_prompt,
+                ai_response=f"Error en procesamiento: {err_str}",
+                tools_executed=tools_executed,
+                records_count=len(raw_data),
+                tienda_id=active_tienda if 'active_tienda' in locals() else None,
+                user_email=user_email,
+                pais=pais,
+                error=err_str
+            )
+            return self._build_error_response(error_detail=err_str, session_id=safe_session_id)
 
     def _build_error_response(
         self,
