@@ -231,14 +231,62 @@ class LogisticaAgent:
 
         return [types.Tool(function_declarations=function_declarations)]
 
+    def _resolve_tool_name(self, name: str) -> str:
+        """
+        Normaliza y resuelve el nombre canónico de la herramienta en Toolbox MCP.
+        Previene fallos si Gemini traduce 'por' -> 'by' o comprime palabras (ej. 'buscarbyshipmentodo').
+        """
+        clean = name.lower().replace("-", "_")
+        aliases = {
+            "buscarbyshipmentodo": "buscar_por_shipment_o_do",
+            "buscar_by_shipment_o_do": "buscar_por_shipment_o_do",
+            "buscar_shipment_o_do": "buscar_por_shipment_o_do",
+            "buscar_shipment": "buscar_por_shipment_o_do",
+            "rastrear_shipment": "buscar_por_shipment_o_do",
+            "buscar_por_shipment": "buscar_por_shipment_o_do",
+            "buscartiendapornombre": "buscar_tienda_por_nombre",
+            "buscar_tienda": "buscar_tienda_por_nombre",
+            "consultardespachoslogistica": "consultar_despachos_logistica",
+            "consultar_despachos": "consultar_despachos_logistica",
+            "resumencargatransporte": "resumen_carga_transporte",
+            "resumen_camiones": "resumen_carga_transporte",
+            "resumendespachospordivision": "resumen_despachos_por_division",
+            "alertasvencimientotransito": "alertas_vencimiento_transito",
+        }
+        if clean in aliases:
+            return aliases[clean]
+
+        stripped = clean.replace("_", "").replace("by", "por")
+        for canonical in [
+            "consultar_despachos_logistica",
+            "resumen_carga_transporte",
+            "resumen_despachos_por_division",
+            "alertas_vencimiento_transito",
+            "buscar_por_shipment_o_do",
+            "buscar_tienda_por_nombre"
+        ]:
+            if stripped == canonical.replace("_", ""):
+                return canonical
+        return name
+
     async def _execute_mcp_tool(self, tool_name: str, arguments: dict, include_data: bool = False) -> Tuple[List[Dict[str, Any]], ToolExecution]:
         """Ejecuta la herramienta seleccionada a través de Toolbox MCP."""
-        fetch_all = (tool_name == "consultar_despachos_logistica" and "pagina" not in arguments)
-        rows = await mcp_client.call_tool(tool_name, arguments, fetch_all_pages=fetch_all)
+        canonical_name = self._resolve_tool_name(tool_name)
+        if canonical_name != tool_name:
+            logger.info(f"🔄 Redirigiendo nombre de herramienta '{tool_name}' -> '{canonical_name}'")
+
+        # Asegurar tipo string en identificadores de shipment / trf_do / tienda si vinieron como números
+        clean_args = dict(arguments or {})
+        for str_key in ("shipment", "trf_do", "tienda", "sku"):
+            if str_key in clean_args and clean_args[str_key] is not None:
+                clean_args[str_key] = str(clean_args[str_key])
+
+        fetch_all = (canonical_name == "consultar_despachos_logistica" and "pagina" not in clean_args)
+        rows = await mcp_client.call_tool(canonical_name, clean_args, fetch_all_pages=fetch_all)
 
         execution_record = ToolExecution(
-            tool_name=tool_name,
-            arguments=arguments,
+            tool_name=canonical_name,
+            arguments=clean_args,
             result_count=len(rows),
             preview=rows[:3] if (include_data and rows) else None
         )
