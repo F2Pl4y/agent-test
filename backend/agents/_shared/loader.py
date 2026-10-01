@@ -141,20 +141,12 @@ class ToolboxMCPClient:
                 return rows
 
         if fetch_all_pages and tool_name == "consultar_despachos_logistica":
-            # Descargar todas las páginas secuencialmente (hasta 500 registros máx)
-            all_rows = []
-            page = 1
-            while page <= 10:
-                page_args = dict(clean_args)
-                page_args["pagina"] = page
-                batch = await _call_single_page(page_args)
-                if not batch:
-                    break
-                all_rows.extend(batch)
-                if len(batch) < 50:
-                    break
-                page += 1
-            final_rows = all_rows
+            # Descargar la totalidad de registros sin tope de páginas
+            # Al no enviar el parámetro 'pagina', BigQuery evalúa (@pagina IS NULL) y retorna todas las filas (hasta 5,000)
+            # en una única consulta instantánea, asegurando que el Excel / CSV contenga el 100% de la información.
+            all_args = dict(clean_args)
+            all_args.pop("pagina", None)
+            final_rows = await _call_single_page(all_args)
         else:
             final_rows = await _call_single_page(clean_args)
 

@@ -153,29 +153,29 @@ class LogisticaAgent:
 
         function_declarations = [
             types.FunctionDeclaration(
-                name="consultar_despachos_logistica",
-                description="Consulta el detalle de despachos y transferencias en tránsito desde el CD hacia las tiendas (TIM, SKU, Descripción, Tienda, Fecha de Envío).",
+                name="resumen_carga_transporte",
+                description="Consulta y lista todas las TIMs (transferencias), despachos y camiones enviados a una tienda o por fecha. Devuelve CADA TIM como una fila única con su placa, fecha, total de cajas, unidades, peso y volumen. Usar SIEMPRE que pidan 'todas las TIMs', 'lista de TIMs', 'camiones' o 'despachos' a una tienda.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM logístico (ej. 655425244)."),
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda (ej. '123', '114')."),
-                        "sku": types.Schema(type=types.Type.STRING, description="Código SKU puntual."),
-                        "pagina": types.Schema(type=types.Type.INTEGER, description="Número de página (1 por defecto).")
+                        "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM específico."),
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '474', '123', '451')."),
+                        "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho en formato 'YYYY-MM-DD'.")
                     },
                     required=[]
                 )
             ),
             types.FunctionDeclaration(
-                name="resumen_carga_transporte",
-                description="Consolida los bultos, cajas, unidades, peso total en kg, volumen en m3 y camiones (por TIM, Placa, Tienda o Fecha 'YYYY-MM-DD').",
+                name="consultar_despachos_logistica",
+                description="Consulta el detalle a nivel de PRODUCTOS / SKUs individuales (artículo por artículo: descripción, unidades) dentro de un TIM específico o para un SKU puntual. Usar SOLO cuando pregunten por productos o artículos.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM."),
-                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte."),
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '123', '451')."),
-                        "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho en formato 'YYYY-MM-DD' (ej. '2026-09-26').")
+                        "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM logístico para ver sus productos (ej. 655425244)."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda (ej. '123', '114')."),
+                        "sku": types.Schema(type=types.Type.STRING, description="Código SKU puntual."),
+                        "pagina": types.Schema(type=types.Type.INTEGER, description="Opcional. Número de página específica solo si el usuario pide paginación explícita. Dejar nulo para traer todos los registros.")
                     },
                     required=[]
                 )
@@ -281,7 +281,21 @@ class LogisticaAgent:
             if str_key in clean_args and clean_args[str_key] is not None:
                 clean_args[str_key] = str(clean_args[str_key])
 
-        fetch_all = (canonical_name == "consultar_despachos_logistica" and "pagina" not in clean_args)
+        # Si Gemini invocó consultar_despachos_logistica pero solo con 'tienda' (sin tim ni sku),
+        # significa que se están buscando las TIMs/despachos de la tienda, no los artículos individuales.
+        if canonical_name == "consultar_despachos_logistica" and "tienda" in clean_args and "tim" not in clean_args and "sku" not in clean_args:
+            logger.info(f"🔄 Redirigiendo consulta de tienda ({clean_args.get('tienda')}) a 'resumen_carga_transporte' para devolver la lista de TIMs consolidadas")
+            canonical_name = "resumen_carga_transporte"
+
+        # Si la herramienta es consultar_despachos_logistica:
+        # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que BigQuery traiga todos los registros.
+        if canonical_name == "consultar_despachos_logistica":
+            if clean_args.get("pagina") == 1:
+                clean_args.pop("pagina", None)
+            fetch_all = ("pagina" not in clean_args)
+        else:
+            fetch_all = False
+
         rows = await mcp_client.call_tool(canonical_name, clean_args, fetch_all_pages=fetch_all)
 
         execution_record = ToolExecution(
@@ -378,11 +392,11 @@ class LogisticaAgent:
                     if rows:
                         raw_data.extend(rows)
 
-                    muestra_datos = rows[:25] if len(rows) > 25 else rows
+                    muestra_datos = rows[:60] if len(rows) > 60 else rows
                     resumen_payload = {
                         "total_filas_obtenidas": len(rows),
                         "muestra_registros": muestra_datos,
-                        "nota": f"Se recuperaron {len(rows)} filas en total de BigQuery. Aquí se proveen las primeras {len(muestra_datos)} para el resumen analítico." if len(rows) > 25 else "Totalidad de registros provistos."
+                        "nota": f"Se recuperaron {len(rows)} filas en total de BigQuery. Aquí se proveen las primeras {len(muestra_datos)} para el resumen analítico." if len(rows) > 60 else "Totalidad de registros provistos."
                     }
 
                     round_tool_responses.append(
@@ -452,13 +466,20 @@ class LogisticaAgent:
                     else:
                         final_text = f"Se recuperaron {len(raw_data)} registros del sistema de transportes para tu consulta."
                 else:
-                    final_text = "Para la fecha indicada no se registran despachos ni camiones en el sistema de transporte en los últimos 60 días."
+                    final_text = "Para la fecha indicada no se registran despachos ni camiones en el sistema de transporte en los últimos 31 días."
+
+            # Incluir datos si include_data es True o si el usuario solicitó explícitamente tabla/exportación/csv/excel/detalle
+            should_include_data = include_data or any(
+                kw in user_prompt.lower() for kw in [
+                    "csv", "excel", "descarga", "exportar", "tabla", "todas", "todos", "lista", "detalle", "filas"
+                ]
+            )
 
             return ChatResponse(
                 answer=final_text,
                 session_id=session_id,
                 tools_executed=tools_executed,
-                data=raw_data if (include_data and raw_data) else None
+                data=raw_data if (should_include_data and raw_data) else None
             )
 
         except Exception as e:

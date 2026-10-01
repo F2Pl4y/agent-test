@@ -17,6 +17,7 @@ logger = logging.getLogger("backend.main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ciclo de vida del servidor: verifica conectividad con Toolbox MCP al iniciar."""
+    mcp_client.clear_cache()
     logger.info("🚀 Iniciando Backend del Agente Logístico Tottus...")
     logger.info(f"📡 Conectando a Toolbox MCP en: {settings.TOOLBOX_URL}")
     

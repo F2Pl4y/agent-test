@@ -18,7 +18,7 @@ tools:
     source: bigquery_logistica_sbx
     description: >
       Consulta el detalle de despachos y transferencias en tránsito desde el CD 
-      hacia las tiendas en los últimos 60 días. Devuelve SKU, descripción, unidades, 
+      hacia las tiendas en los últimos 31 días. Devuelve SKU, descripción, unidades, 
       cajas, peso, placa de transporte y fecha de envío. Permite buscar por TIM, 
       tienda, SKU o placa.
     parameters:
@@ -36,7 +36,7 @@ tools:
         required: false
       - name: pagina
         type: integer
-        description: "Número de página a consultar (1 para filas 1-50, 2 para filas 51-100, etc.). Por defecto 1."
+        description: "Número de página específica (50 filas por página). Dejar vacío o null para obtener todos los registros sin paginar."
         required: false
     statement: |
       WITH datos AS (
@@ -55,7 +55,7 @@ tools:
             ROW_NUMBER() OVER(ORDER BY Fecha_Enviado DESC, sku) AS num_fila
         FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
         WHERE Fecha_Enviado <= CURRENT_DATE("America/Lima")
-          AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+          AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
           AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
           AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
           AND (@sku IS NULL OR @sku = '' OR sku = @sku)
@@ -74,7 +74,8 @@ tools:
           Fecha_Enviado
       FROM datos
       WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
-      ORDER BY num_fila;
+      ORDER BY num_fila
+      LIMIT 5000;
 
   # ----------------------------------------------------
   # HERRAMIENTA 2: Consolidado de carga por Camión (Placa) o TIM
@@ -117,7 +118,7 @@ tools:
           ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
           ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
       FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
         AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
         AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
         AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
@@ -128,7 +129,7 @@ tools:
         )
       GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
       ORDER BY fecha_despacho DESC, total_cajas DESC
-      LIMIT 50;
+      LIMIT 5000;
 
   # ----------------------------------------------------
   # HERRAMIENTA 3: Despachos agregados por División Comercial (J01 a J11)
@@ -235,7 +236,7 @@ tools:
           ROUND(SUM(Cajas), 0) AS total_cajas,
           ROUND(SUM(Peso_Total), 2) AS peso_total_kg
       FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
         AND (@shipment IS NULL OR @shipment = '' OR CAST(Shipment AS STRING) = @shipment)
         AND (@trf_do IS NULL OR @trf_do = '' OR CAST(Trf_DO AS STRING) = @trf_do)
       GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
@@ -262,7 +263,7 @@ tools:
           COUNT(DISTINCT tim) AS total_despachos_recientes,
           MAX(Fecha_Enviado) AS ultimo_despacho_registrado
       FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 60 DAY)
+      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
         AND LOWER(Nombre_Tienda) LIKE CONCAT('%', LOWER(@nombre_parcial), '%')
       GROUP BY Tienda, Nombre_Tienda
       ORDER BY total_despachos_recientes DESC
