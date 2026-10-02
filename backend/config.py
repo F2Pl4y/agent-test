@@ -1,4 +1,5 @@
 import os
+from typing import List
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -45,5 +46,26 @@ class Settings:
             return explicit.strip().lower() in ("true", "1", "yes")
         # Si no está explícito en el .env, priorizar API Key si existe
         return not bool(self.GEMINI_API_KEY)
+
+    @property
+    def PILOT_ACCESS_KEY(self) -> str:
+        load_dotenv(dotenv_path=env_path, override=True)
+        return os.getenv("PILOT_ACCESS_KEY", "D4t4-PL$2026").strip()
+
+    @property
+    def GOOGLE_CLIENT_ID(self) -> str:
+        load_dotenv(dotenv_path=env_path, override=True)
+        return os.getenv("GOOGLE_CLIENT_ID", "").strip()
+
+    @property
+    def ALLOWED_USERS(self) -> List[str]:
+        load_dotenv(dotenv_path=env_path, override=True)
+        raw = os.getenv("ALLOWED_USERS", "").strip()
+        # Solo se libera el acceso a todos si se escribe explícitamente 'all_users'
+        if raw.lower() == "all_users":
+            return ["all_users"]
+        # Limpiar comillas, retornos de carro y saltos de línea
+        cleaned = raw.replace('"', '').replace("'", "").replace("\r", "").replace("\n", ",")
+        return [u.strip().lower() for u in cleaned.split(",") if u.strip()]
 
 settings = Settings()

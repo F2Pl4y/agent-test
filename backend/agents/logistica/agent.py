@@ -406,14 +406,27 @@ class LogisticaAgent:
 
                     rows, exec_log = await self._execute_mcp_tool(fn_name, fn_args, include_data=include_data)
                     tools_executed.append(exec_log)
-                    if rows:
-                        raw_data.extend(rows)
+                    dict_rows = [r for r in rows if isinstance(r, dict)] if rows else []
+                    if dict_rows:
+                        raw_data.extend(dict_rows)
 
-                    muestra_datos = rows[:60] if len(rows) > 60 else rows
+                    muestra_datos = dict_rows[:60] if len(dict_rows) > 60 else dict_rows
+
+                    # Calcular estadísticas operativas clave para que Gemini proporcione cifras 100% exactas
+                    tiendas_set = set(str(r.get("Tienda") or r.get("tienda") or "") for r in dict_rows if (r.get("Tienda") or r.get("tienda")))
+                    placas_set = set(str(r.get("Placa") or r.get("placa") or "") for r in dict_rows if (r.get("Placa") or r.get("placa")))
+                    tims_set = set(str(r.get("tim") or r.get("Tim") or "") for r in dict_rows if (r.get("tim") or r.get("Tim")))
+
                     resumen_payload = {
-                        "total_filas_obtenidas": len(rows),
+                        "total_filas_despachos": len(dict_rows),
+                        "total_tiendas_distintas": len(tiendas_set),
+                        "total_camiones_distintos": len(placas_set),
+                        "total_tims_distintos": len(tims_set),
                         "muestra_registros": muestra_datos,
-                        "nota": f"Se recuperaron {len(rows)} filas en total de BigQuery. Aquí se proveen las primeras {len(muestra_datos)} para el resumen analítico." if len(rows) > 60 else "Totalidad de registros provistos."
+                        "nota": (
+                            f"MÉTRICA EXACTA: Se recuperaron {len(dict_rows)} despachos/registros en total de BigQuery correspondientes a {len(tiendas_set)} tiendas únicas/distintas. "
+                            f"Si el usuario pregunta cuántas tiendas recibieron el SKU o producto, responde explícitamente indicando que son {len(tiendas_set)} tiendas distintas en un total de {len(dict_rows)} despachos/envíos."
+                        ) if len(tiendas_set) > 0 else f"Se recuperaron {len(dict_rows)} registros de BigQuery."
                     }
 
                     round_tool_responses.append(
@@ -504,12 +517,8 @@ class LogisticaAgent:
                     pais=pais
                 )
 
-            # Incluir datos si include_data es True o si el usuario solicitó explícitamente tabla/exportación/csv/excel/detalle
-            should_include_data = include_data or any(
-                kw in user_prompt.lower() for kw in [
-                    "csv", "excel", "descarga", "exportar", "tabla", "todas", "todos", "lista", "detalle", "filas", "agrupar", "por dia"
-                ]
-            )
+            # Incluir datos descargables ÚNICAMENTE si el usuario activó explícitamente el switch en el frontend
+            should_include_data = bool(include_data)
 
             return ChatResponse(
                 answer=final_text,

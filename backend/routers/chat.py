@@ -1,8 +1,9 @@
 import uuid
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+import secrets
+from fastapi import APIRouter, HTTPException, Header
+from typing import List, Dict, Any, Optional
 
-from backend.models import ChatRequest, ChatResponse, HealthResponse, SessionSummary, SessionDetail
+from backend.models import VerifyRequest, VerifyResponse, ChatRequest, ChatResponse, HealthResponse, SessionSummary, SessionDetail
 from backend.agents.logistica.agent import agente_logistica
 from backend.agents._shared.loader import mcp_client
 from backend.services.session_manager import session_manager
@@ -10,13 +11,143 @@ from backend.config import settings
 
 router = APIRouter(prefix="/api", tags=["Logística & Chat"])
 
+@router.post("/auth/verify", response_model=VerifyResponse, summary="Verificar credenciales de acceso antes de entrar")
+async def verify_auth_endpoint(request: VerifyRequest) -> VerifyResponse:
+    """
+    Verifica inmediatamente el correo institucional y la clave de acceso del piloto (o token de Google).
+    Si las credenciales no son válidas, rechaza con 401 o 403 impidiendo el ingreso al chat.
+    """
+    user_email = (request.email or "").strip().lower()
+    if not user_email.endswith("@tottus.com.pe"):
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso denegado: El correo debe pertenecer exclusivamente al dominio corporativo @tottus.com.pe."
+        )
+
+    # 1. Control de Lista Blanca
+    allowed_list = settings.ALLOWED_USERS
+    if "all_users" not in allowed_list:
+        if not allowed_list:
+            raise HTTPException(
+                status_code=403,
+                detail="Acceso denegado: No hay colaboradores configurados en la lista de acceso (ALLOWED_USERS)."
+            )
+        if user_email not in allowed_list:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Acceso denegado: La cuenta '{user_email}' no figura en la lista de colaboradores autorizados para este piloto."
+            )
+
+    # 2. Control de Clave Secreta
+    token = (request.key or "").strip()
+    is_authorized = False
+
+    # Clave del Piloto
+    if token and settings.PILOT_ACCESS_KEY and secrets.compare_digest(token, settings.PILOT_ACCESS_KEY):
+        is_authorized = True
+
+    # Google OAuth (futuro)
+    if not is_authorized and token and settings.GOOGLE_CLIENT_ID:
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+            google_email = (idinfo.get("email") or "").lower()
+            if google_email == user_email:
+                is_authorized = True
+        except Exception:
+            pass
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=401,
+            detail="Clave de acceso de piloto incorrecta. Por favor, verifica la clave del equipo."
+        )
+
+    return VerifyResponse(
+        status="ok",
+        message="Credenciales verificadas exitosamente.",
+        email=user_email
+    )
+
 @router.post("/chat", response_model=ChatResponse, summary="Enviar consulta conversacional al agente logístico")
-async def chat_endpoint(request: ChatRequest) -> ChatResponse:
+async def chat_endpoint(
+    request: ChatRequest,
+    authorization: Optional[str] = Header(None)
+) -> ChatResponse:
     """
     Endpoint principal para interactuar con el agente en lenguaje natural.
-    Gemini 3.5 Flash-Lite evalúa la pregunta, consulta BigQuery vía Toolbox MCP si es necesario,
-    resguarda la auditoría persistente y devuelve la síntesis analítica junto con la tabla de datos estructurados.
+    Control de seguridad en Modo Dual:
+    1. Exige dominio @tottus.com.pe en user_email.
+    2. Valida la credencial en Authorization: Bearer <token>:
+       - Clave del Piloto (D4t4-PL$2026) vía comparación criptográfica secrets.compare_digest
+       - O Token de Google OAuth si se encuentra configurado GOOGLE_CLIENT_ID a futuro.
     """
+    # 🔒 1. Control de dominio corporativo: Exclusivo para colaboradores @tottus.com.pe
+    user_email = (request.user_email or "").strip().lower()
+    if not user_email.endswith("@tottus.com.pe"):
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso denegado: El asistente logístico está restringido exclusivamente a colaboradores con cuenta corporativa @tottus.com.pe."
+        )
+
+    # 🔒 1.1 Control estricto de Lista Blanca (Whitelist)
+    allowed_list = settings.ALLOWED_USERS
+    # Solo se permite paso libre si explícitamente se configuró "all_users"
+    if "all_users" not in allowed_list:
+        if not allowed_list:
+            raise HTTPException(
+                status_code=403,
+                detail="Acceso denegado: No hay colaboradores configurados en la lista de acceso (ALLOWED_USERS). Contacta al administrador."
+            )
+        if user_email not in allowed_list:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Acceso denegado: La cuenta '{user_email}' no figura en la lista de colaboradores autorizados para este piloto."
+            )
+
+    # 🔒 2. Validación de Credencial (Modo Dual: Clave Piloto o Google OAuth)
+    token = ""
+    if authorization:
+        parts = authorization.strip().split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+        elif len(parts) == 1:
+            token = parts[0]
+
+    is_authorized = False
+
+    # Caso A: Verificación con Clave Secreta del Piloto
+    if token and settings.PILOT_ACCESS_KEY and secrets.compare_digest(token, settings.PILOT_ACCESS_KEY):
+        is_authorized = True
+
+    # Caso B: Verificación con Google OAuth (cuando se configure GOOGLE_CLIENT_ID a futuro)
+    if not is_authorized and token and settings.GOOGLE_CLIENT_ID:
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+            google_email = (idinfo.get("email") or "").lower()
+            if google_email.endswith("@tottus.com.pe"):
+                if "all_users" not in allowed_list:
+                    if not allowed_list or google_email not in allowed_list:
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Acceso denegado: La cuenta '{google_email}' autenticada con Google no figura en la lista de colaboradores autorizados para este piloto."
+                        )
+                is_authorized = True
+                user_email = google_email
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=401,
+            detail="Credencial no autorizada. Ingresa la clave válida del piloto o inicia sesión con tu cuenta corporativa."
+        )
+
     session_id = request.session_id or f"session_{uuid.uuid4().hex[:8]}"
     try:
         response = await agente_logistica.run(
@@ -24,10 +155,12 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
             session_id=session_id,
             tienda_id=request.tienda_id,
             include_data=request.include_data,
-            user_email=request.user_email,
+            user_email=user_email,
             pais=request.pais or "PE"
         )
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar la consulta: {str(e)}")
 

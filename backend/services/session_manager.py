@@ -29,7 +29,9 @@ class SessionManager:
 
         # Crear directorio de resguardo si no existe
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.audit_log_file = self.storage_dir.parent / "audit_log.jsonl"
         logger.info(f"💾 Almacén de resguardo de sesiones activo en: {self.storage_dir}")
+        logger.info(f"📋 Bitácora centralizada de auditoría: {self.audit_log_file}")
 
         # Caché rápida en memoria {session_id: dict}
         self._cache: Dict[str, Dict[str, Any]] = {}
@@ -150,6 +152,13 @@ class SessionManager:
         safe_id = self.sanitize_session_id(session_id)
         session = self.get_or_create_session(safe_id, user_email=user_email, pais=pais or "PE")
         
+        # 🔒 Seguridad y Gobernanza: Si la sesión pertenecía a otro usuario, generar nueva sesión independiente
+        current_owner = session.get("user_email")
+        if current_owner and user_email and current_owner.strip().lower() != user_email.strip().lower():
+            logger.info(f"🔄 Cambio de usuario detectado en sesión '{safe_id}' ({current_owner} -> {user_email}). Creando nueva sesión independiente.")
+            safe_id = self.sanitize_session_id(f"sess_{uuid.uuid4().hex[:10]}")
+            session = self.get_or_create_session(safe_id, user_email=user_email, pais=pais or "PE")
+
         now_iso = datetime.now(timezone.utc).isoformat()
         session["updated_at"] = now_iso
         session["total_queries"] = session.get("total_queries", 0) + 1
@@ -175,6 +184,7 @@ class SessionManager:
         turn_entry = {
             "turn_index": len(session.get("turns", [])) + 1,
             "timestamp": now_iso,
+            "user_email": user_email or session.get("user_email"),
             "user_message": user_message,
             "ai_response": ai_response,
             "tienda_context": session.get("last_tienda"),

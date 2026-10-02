@@ -1,6 +1,17 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
+class VerifyRequest(BaseModel):
+    """Payload para verificar credenciales de acceso (email y clave de piloto)."""
+    email: str = Field(..., description="Correo institucional @tottus.com.pe")
+    key: str = Field(..., description="Clave de acceso de piloto o token de Google")
+
+class VerifyResponse(BaseModel):
+    """Respuesta de verificación de credenciales."""
+    status: str = Field(..., example="ok")
+    message: str = Field(..., example="Credenciales válidas")
+    email: str = Field(..., example="fhurtadoa@tottus.com.pe")
+
 class ChatRequest(BaseModel):
     """Payload de entrada para enviar un mensaje al agente logístico."""
     message: str = Field(..., description="Pregunta del usuario en lenguaje natural", example="¿Qué productos y despachos hay en el TIM 655423616?")
