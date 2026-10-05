@@ -216,3 +216,12 @@ async def delete_session_endpoint(session_id: str):
     safe_id = session_manager.sanitize_session_id(session_id)
     deleted = session_manager.delete_session(safe_id)
     return {"status": "ok", "message": f"Sesión '{safe_id}' purgada con éxito." if deleted else "No se encontró la sesión."}
+
+@router.get("/audit", summary="Bitácora unificada de todas las consultas para gobernanza")
+async def get_audit_log_endpoint(limit: int = 150, user_email: Optional[str] = None):
+    """
+    Devuelve la cronología unificada de todas las consultas realizadas por TODOS los colaboradores.
+    Permite auditar en una sola vista quién preguntó qué, a qué hora y qué herramientas se ejecutaron.
+    """
+    return session_manager.get_unified_audit_log(limit=limit, user_email=user_email)
+

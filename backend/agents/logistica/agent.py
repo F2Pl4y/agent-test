@@ -155,14 +155,15 @@ class LogisticaAgent:
         function_declarations = [
             types.FunctionDeclaration(
                 name="resumen_carga_transporte",
-                description="Consulta y lista todas las TIMs (transferencias), despachos y camiones enviados a una tienda o por fecha. Devuelve CADA TIM como una fila única con su placa, fecha, total de cajas, unidades, peso y volumen. Usar SIEMPRE que pidan 'todas las TIMs', 'lista de TIMs', 'camiones' o 'despachos' a una tienda.",
+                description="Consulta y lista las TIMs (transferencias), despachos y camiones enviados a una tienda para una fecha específica o rango de fechas. Devuelve CADA TIM como una fila única con su placa, fecha, total de cajas, unidades, peso y volumen.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM específico."),
                         "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte."),
                         "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '474', '123', '451')."),
-                        "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho en formato 'YYYY-MM-DD'.")
+                        "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho o fecha de inicio en formato 'YYYY-MM-DD'."),
+                        "fecha_fin": types.Schema(type=types.Type.STRING, description="Opcional. Fecha final en formato 'YYYY-MM-DD' cuando se consulta un rango de fechas.")
                     },
                     required=[]
                 )
@@ -408,7 +409,17 @@ class LogisticaAgent:
                     tools_executed.append(exec_log)
                     dict_rows = [r for r in rows if isinstance(r, dict)] if rows else []
                     if dict_rows:
-                        raw_data.extend(dict_rows)
+                        canonical = self._resolve_tool_name(fn_name)
+                        if canonical in ("resumen_carga_transporte", "consultar_despachos_logistica", "resumen_despachos_por_division", "buscar_por_shipment_o_do", "alertas_vencimiento_transito"):
+                            if any(t.tool_name == "buscar_tienda_por_nombre" for t in tools_executed[:-1]) and len(raw_data) <= 5:
+                                raw_data = list(dict_rows)
+                            else:
+                                raw_data.extend(dict_rows)
+                        elif canonical == "buscar_tienda_por_nombre":
+                            if not raw_data:
+                                raw_data.extend(dict_rows)
+                        else:
+                            raw_data.extend(dict_rows)
 
                     muestra_datos = dict_rows[:60] if len(dict_rows) > 60 else dict_rows
 
@@ -517,14 +528,29 @@ class LogisticaAgent:
                     pais=pais
                 )
 
-            # Incluir datos descargables ÚNICAMENTE si el usuario activó explícitamente el switch en el frontend
-            should_include_data = bool(include_data)
+            # FILTRO ESTRICTO DE NEGOCIO:
+            # Solo devolver datos estructurados (para tabla y descarga de Excel)
+            # si efectivamente se ejecutó una herramienta logística sustantiva (camiones, despachos, etc.)
+            # Y NUNCA cuando solo se hizo una búsqueda auxiliar de tienda o la IA está pidiendo fecha.
+            substantive_tools = {
+                "resumen_carga_transporte",
+                "consultar_despachos_logistica",
+                "resumen_despachos_por_division",
+                "buscar_por_shipment_o_do",
+                "alertas_vencimiento_transito"
+            }
+            has_substantive_data = any(t.tool_name in substantive_tools for t in tools_executed)
+            is_asking_for_date = any(kw in final_text.lower() for kw in [
+                "indícame la fecha", "indicame la fecha", "indica la fecha", "rango de fechas", "fecha puntual", "qué fecha", "para qué fecha"
+            ])
+
+            should_send_data = bool(include_data) and bool(raw_data) and has_substantive_data and (not is_asking_for_date)
 
             return ChatResponse(
                 answer=final_text,
                 session_id=safe_session_id,
                 tools_executed=tools_executed,
-                data=raw_data if (should_include_data and raw_data) else None
+                data=raw_data if should_send_data else None
             )
 
         except Exception as e:

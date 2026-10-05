@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_8c2b04cea7",
+  "created_at": "2026-10-05T14:58:03.072310+00:00",
+  "updated_at": "2026-10-05T14:58:03.090517+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T14:58:03.090517+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "me puedes mostrar las tims que fueron a atocongo?",
+      "ai_response": "Para poder brindarte la lista exacta de despachos y transferencias (TIMs) hacia la tienda **Atocongo (ID 107)**, por favor indícame la **fecha puntual** (por ejemplo: `03.10` o `26 de septiembre`) o el **rango de fechas** (por ejemplo: `del 25 al 30 de septiembre`) que deseas consultar para continuar.",
+      "tienda_context": "107",
+      "tools_executed": [],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

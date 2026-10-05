@@ -1,0 +1,31 @@
+{
+  "session_id": "sess_84f9f093f9",
+  "created_at": "2026-10-02T21:19:03.270814+00:00",
+  "updated_at": "2026-10-02T21:19:03.282724+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-02T21:19:03.282724+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "tienda arequipa",
+      "ai_response": "He encontrado varias ubicaciones para **Arequipa** en el sistema logístico de Tottus. ¿A cuál de ellas te refieres?\n\n* **316** - Arequipa Porongoche\n* **317** - Arequipa Cayma\n* **338** - Arequipa Parra\n* **617** - Centro de Producción de Arequipa\n* **613** - CD Arequipa Ransa\n\nPor favor, indícame el número o nombre de la tienda para actualizar nuestro contexto y consultar las TIMs, despachos o camiones que necesites.",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "arequipa"
+          },
+          "result_count": 5,
+          "preview": null
+        }
+      ],
+      "records_count": 5,
+      "error": null
+    }
+  ]
+}

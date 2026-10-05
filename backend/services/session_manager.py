@@ -195,7 +195,20 @@ class SessionManager:
 
         session.setdefault("turns", []).append(turn_entry)
         self._persist_to_disk(session)
-        logger.info(f"✅ [Resguardo Auditoría] Turno #{turn_entry['turn_index']} guardado para sesión '{safe_id}' (registros={records_count})")
+
+        # 🛡️ Gobernanza Centralizada: Registrar en bitácora unificada audit_log.jsonl
+        self._append_to_audit_log(
+            session_id=safe_id,
+            user_email=turn_entry["user_email"],
+            timestamp=now_iso,
+            user_message=user_message,
+            ai_response=ai_response,
+            tools_executed=formatted_tools,
+            records_count=records_count,
+            tienda=session.get("last_tienda")
+        )
+
+        logger.info(f"✅ [Resguardo Auditoría] Turno #{turn_entry['turn_index']} guardado para sesión '{safe_id}' ({turn_entry['user_email']})")
         return session
 
     def _persist_to_disk(self, session: Dict[str, Any]):
@@ -253,6 +266,110 @@ class SessionManager:
         except Exception as e:
             logger.error(f"Error al listar sesiones: {e}")
             return []
+
+    def _append_to_audit_log(
+        self,
+        session_id: str,
+        user_email: str,
+        timestamp: str,
+        user_message: str,
+        ai_response: str,
+        tools_executed: List[Any],
+        records_count: int,
+        tienda: Optional[str] = None
+    ):
+        """Escribe una línea en audit_log.jsonl para auditoría centralizada."""
+        try:
+            tools_summary = []
+            for t in tools_executed:
+                if isinstance(t, dict):
+                    tools_summary.append(t.get("tool_name", "Operación"))
+                elif hasattr(t, "tool_name"):
+                    tools_summary.append(t.tool_name)
+                else:
+                    tools_summary.append(str(t))
+
+            entry = {
+                "timestamp": timestamp,
+                "user_email": user_email,
+                "session_id": session_id,
+                "user_message": user_message,
+                "ai_response_preview": (ai_response[:220] + "...") if len(ai_response) > 220 else ai_response,
+                "ai_response_full": ai_response,
+                "tools_executed": tools_summary,
+                "records_count": records_count,
+                "tienda": tienda
+            }
+            with open(self.audit_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logger.warning(f"⚠️ Error al registrar en audit_log.jsonl: {e}")
+
+    def get_unified_audit_log(self, limit: int = 150, user_email: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Devuelve la cronología unificada de todas las consultas realizadas por todos los usuarios."""
+        if not self.audit_log_file.exists():
+            self._rebuild_audit_log_from_sessions()
+
+        entries = []
+        try:
+            with open(self.audit_log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            item = json.loads(line)
+                            if user_email and user_email.lower() not in (item.get("user_email") or "").lower():
+                                continue
+                            entries.append(item)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.error(f"Error al leer audit_log: {e}")
+
+        # Invertir para mostrar los más recientes arriba
+        entries.reverse()
+        return entries[:limit]
+
+    def _rebuild_audit_log_from_sessions(self):
+        """Reconstruye el audit_log inicial a partir de todos los archivos JSON de sesiones pasadas."""
+        all_turns = []
+        for p in self.storage_dir.glob("*.json"):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    sid = data.get("session_id", p.stem)
+                    s_user = data.get("user_email", "supervisor@tottus.com.pe")
+                    for t in data.get("turns", []):
+                        tools_summary = []
+                        for tool in t.get("tools_executed", []):
+                            if isinstance(tool, dict):
+                                tools_summary.append(tool.get("tool_name", "Operación"))
+                            else:
+                                tools_summary.append(str(tool))
+
+                        ai_txt = t.get("ai_response", "")
+                        all_turns.append({
+                            "timestamp": t.get("timestamp") or data.get("created_at"),
+                            "user_email": t.get("user_email") or s_user,
+                            "session_id": sid,
+                            "user_message": t.get("user_message", ""),
+                            "ai_response_preview": (ai_txt[:220] + "...") if len(ai_txt) > 220 else ai_txt,
+                            "ai_response_full": ai_txt,
+                            "tools_executed": tools_summary,
+                            "records_count": t.get("records_count", 0),
+                            "tienda": t.get("tienda_context") or data.get("last_tienda")
+                        })
+            except Exception:
+                pass
+        
+        all_turns.sort(key=lambda x: x.get("timestamp", ""))
+        try:
+            with open(self.audit_log_file, "w", encoding="utf-8") as f:
+                for item in all_turns:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            logger.info(f"📋 Bitácora histórica reconstruida con {len(all_turns)} consultas en total.")
+        except Exception as e:
+            logger.error(f"Error al reconstruir audit_log: {e}")
 
 # Instancia singleton del gestor de sesiones
 session_manager = SessionManager()

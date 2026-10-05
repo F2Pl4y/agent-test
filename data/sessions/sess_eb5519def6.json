@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_eb5519def6",
+  "created_at": "2026-10-05T04:36:28.325999+00:00",
+  "updated_at": "2026-10-05T04:36:28.345013+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T04:36:28.345013+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "HOLA",
+      "ai_response": "¡Hola! Soy el Asistente Oficial de Inteligencia Operativa y Logística de Tottus. \n\nVeo que estás operando con la **Tienda Angamos (ID '123')**. ¿En qué consulta sobre despachos, camiones, transferencias (TIM) o mercadería en tránsito te puedo asistir hoy?",
+      "tienda_context": "123",
+      "tools_executed": [],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

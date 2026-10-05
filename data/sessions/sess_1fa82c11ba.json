@@ -1,0 +1,75 @@
+{
+  "session_id": "sess_1fa82c11ba",
+  "created_at": "2026-10-02T20:39:01.023320+00:00",
+  "updated_at": "2026-10-02T20:39:01.042050+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-02T20:39:01.042050+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "dame la lista de las tim que llegaron a la tienda 123 el dia de ayer",
+      "ai_response": "A continuación, te presento el detalle de las TIMs y despachos que se enviaron a la **Tienda 123 (Angamos)** el día de ayer (**2026-10-01**):\n\n| PLACA | TIM | CD ORIGEN | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n| :--- | :--- | :---: | :---: | :---: | :---: | :---: |\n| BHL867 | 676167461 | 676 | 1,992 | 6,619 | 7,161.25 | 31.79 |\n| APD875 | 655428172 | 655 | 1,274 | 7,054 | 16,743.41 | 20.08 |\n| RBC024 | 655428290 | 655 | 883 | 6,891 | 6,499.62 | 13.89 |\n| RBC024 | 655428288 | 655 | 6 | 11 | 9.58 | 0.06 |\n| RBC024 | 655428289 | 655 | 5 | 7 | 7.46 | 0.04 |\n| APD875 | 655428171 | 655 | 2 | 25 | 13.46 | 0.10 |\n\n**Resumen operativo del día:**\n* **Total de camiones / placas distintas:** 3\n* **Total de TIMs registradas:** 6\n* **Volumen total:** 65.96 m³",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "123",
+            "fecha": "2026-10-01"
+          },
+          "result_count": 6,
+          "preview": [
+            {
+              "tim": 676167461,
+              "Placa": "BHL867",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "676",
+              "fecha_despacho": "2026-10-01",
+              "total_pallets": 0,
+              "total_skus_distintos": 399,
+              "total_unidades": 6619,
+              "total_cajas": 1992,
+              "peso_total_kg": 7161.25,
+              "volumen_total_m3": 31.79
+            },
+            {
+              "tim": 655428172,
+              "Placa": "APD875",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-01",
+              "total_pallets": 0,
+              "total_skus_distintos": 314,
+              "total_unidades": 7054,
+              "total_cajas": 1274,
+              "peso_total_kg": 16743.41,
+              "volumen_total_m3": 20.08
+            },
+            {
+              "tim": 655428290,
+              "Placa": "RBC024",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-01",
+              "total_pallets": 0,
+              "total_skus_distintos": 217,
+              "total_unidades": 6891,
+              "total_cajas": 883,
+              "peso_total_kg": 6499.62,
+              "volumen_total_m3": 13.89
+            }
+          ]
+        }
+      ],
+      "records_count": 6,
+      "error": null
+    }
+  ]
+}

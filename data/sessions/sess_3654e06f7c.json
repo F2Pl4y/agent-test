@@ -1,0 +1,74 @@
+{
+  "session_id": "sess_3654e06f7c",
+  "created_at": "2026-10-05T05:16:15.131998+00:00",
+  "updated_at": "2026-10-05T05:16:15.145454+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T05:16:15.145454+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "cual fue el ultimo camion que salio de huachipa?",
+      "ai_response": "El último camión despachado hacia la **Tienda Atocongo (107)** con fecha **2026-10-03** corresponde a la siguiente transferencia (TIM):\n\n| PLACA | TIM | CD ORIGEN | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n| :--- | :---: | :---: | :---: | :---: | :---: | :---: |\n| **CJJ742** | 676167837 | 676 | 1,301 | 5,447 | 5,016.19 | 17.80 |\n\n*(Nota: Este despacho se originó en el CD 676 y cuenta con fecha de despacho del 3 de octubre de 2026).*",
+      "tienda_context": "107",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "107"
+          },
+          "result_count": 177,
+          "preview": [
+            {
+              "tim": 676167837,
+              "Placa": "CJJ742",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "676",
+              "fecha_despacho": "2026-10-03",
+              "total_pallets": 1,
+              "total_skus_distintos": 287,
+              "total_unidades": 5447,
+              "total_cajas": 1301,
+              "peso_total_kg": 5016.19,
+              "volumen_total_m3": 17.8
+            },
+            {
+              "tim": 655429144,
+              "Placa": "RBC031",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-03",
+              "total_pallets": 0,
+              "total_skus_distintos": 230,
+              "total_unidades": 5291,
+              "total_cajas": 840,
+              "peso_total_kg": 5272.19,
+              "volumen_total_m3": 14.72
+            },
+            {
+              "tim": 655428942,
+              "Placa": "RBC047",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-03",
+              "total_pallets": 0,
+              "total_skus_distintos": 205,
+              "total_unidades": 3879,
+              "total_cajas": 667,
+              "peso_total_kg": 5341.67,
+              "volumen_total_m3": 14.57
+            }
+          ]
+        }
+      ],
+      "records_count": 177,
+      "error": null
+    }
+  ]
+}

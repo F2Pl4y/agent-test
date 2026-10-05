@@ -101,7 +101,11 @@ tools:
         required: false
       - name: fecha
         type: string
-        description: "Fecha específica de despacho en formato YYYY-MM-DD (ej. '2026-09-26'). Opcional."
+        description: "Fecha específica de despacho o fecha de inicio en formato YYYY-MM-DD (ej. '2026-09-26'). Opcional."
+        required: false
+      - name: fecha_fin
+        type: string
+        description: "Fecha final en formato YYYY-MM-DD cuando se consulta un rango de fechas (ej. '2026-09-30'). Opcional."
         required: false
       - name: pagina
         type: integer
@@ -128,9 +132,12 @@ tools:
           AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
           AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
           AND (
-            @fecha IS NULL OR @fecha = '' 
-            OR CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
-            OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
+            (@fecha IS NULL OR @fecha = '')
+            OR (@fecha_fin IS NOT NULL AND @fecha_fin != '' AND DATE(Fecha_Enviado) >= DATE(@fecha) AND DATE(Fecha_Enviado) <= DATE(@fecha_fin))
+            OR ((@fecha_fin IS NULL OR @fecha_fin = '') AND (
+                 CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
+                 OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
+            ))
           )
         GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
       ),
