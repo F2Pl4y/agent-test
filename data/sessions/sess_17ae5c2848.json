@@ -1,0 +1,87 @@
+{
+  "session_id": "sess_17ae5c2848",
+  "created_at": "2026-10-05T19:31:49.670015+00:00",
+  "updated_at": "2026-10-05T19:31:49.682753+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T19:31:49.682753+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "puedes decirme si hay camiones que se encuentren cargados pero que no tengan fecha de envio hasta el dia de hoy?",
+      "ai_response": "Revisando los registros de despachos y transferencias (TIMs) para la **Tienda Atocongo (Código 107)**, **no se encuentran camiones ni transferencias registrados sin fecha de envío** para el día de hoy. \n\nTodos los despachos y camiones cargados hacia tu tienda cuentan con su respectiva fecha de despacho registrada en el sistema logístico (por ejemplo, los últimos movimientos corresponden a las fechas 03 y 04 de octubre de 2026).\n\n¿Te gustaría verificar el detalle de algún despacho o camión en particular de las fechas recientes?",
+      "tienda_context": "107",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "fecha": "2026-10-05",
+            "tienda": "107"
+          },
+          "result_count": 1,
+          "preview": [
+            "The query returned 0 rows."
+          ]
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "fecha_fin": "2026-10-05",
+            "tienda": "107"
+          },
+          "result_count": 178,
+          "preview": [
+            {
+              "tim": 676167966,
+              "Placa": "BXY939",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "676",
+              "fecha_despacho": "2026-10-04",
+              "total_pallets": 2,
+              "total_skus_distintos": 177,
+              "total_unidades": 3870,
+              "total_cajas": 787,
+              "peso_total_kg": 3708.09,
+              "volumen_total_m3": 16.41
+            },
+            {
+              "tim": 676167837,
+              "Placa": "CJJ742",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "676",
+              "fecha_despacho": "2026-10-03",
+              "total_pallets": 1,
+              "total_skus_distintos": 287,
+              "total_unidades": 5447,
+              "total_cajas": 1301,
+              "peso_total_kg": 5016.19,
+              "volumen_total_m3": 17.8
+            },
+            {
+              "tim": 655429144,
+              "Placa": "RBC031",
+              "Tienda": "107",
+              "Nombre_Tienda": "Atocongo",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-03",
+              "total_pallets": 0,
+              "total_skus_distintos": 230,
+              "total_unidades": 5291,
+              "total_cajas": 840,
+              "peso_total_kg": 5272.19,
+              "volumen_total_m3": 14.72
+            }
+          ]
+        }
+      ],
+      "records_count": 178,
+      "error": null
+    }
+  ]
+}

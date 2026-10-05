@@ -1,0 +1,23 @@
+{
+  "session_id": "sess_40dbba8bef",
+  "created_at": "2026-10-05T19:30:55.451909+00:00",
+  "updated_at": "2026-10-05T19:30:55.466597+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T19:30:55.466597+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "puedes decirme si hay camiones que se encuentren cargados pero que no se hallan enviado hasta el dia de hoy?",
+      "ai_response": "Como Asistente de Transporte y Despachos de Tottus, mi labor se limita exclusivamente a consultar despachos operativos, transferencias (TIM), camiones y mercadería en tránsito hacia nuestras tiendas registrados en el sistema logístico. No cuento con visibilidad sobre el estado interno de patios o camiones pendientes de carga en el andén que aún no hayan generado un registro de despacho oficial.\n\nSi deseas revisar los camiones, transferencias (TIMs) o despachos oficiales que ya han sido enviados y se encuentran en tránsito hacia la **Tienda 107** para una fecha o rango de fechas específicos, por favor indícame la fecha que deseas consultar (por ejemplo: `hoy`, `ayer` o una fecha puntual como `2026-10-05`) y con gusto revisaré los registros disponibles.",
+      "tienda_context": "107",
+      "tools_executed": [],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

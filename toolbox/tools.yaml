@@ -34,6 +34,10 @@ tools:
         type: string
         description: "Código SKU del producto. Opcional para rastrear un artículo puntual."
         required: false
+      - name: placa
+        type: string
+        description: "Placa del camión de transporte. Opcional para filtrar por vehículo."
+        required: false
       - name: pagina
         type: integer
         description: "Número de página específica (50 filas por página). Dejar vacío o null para obtener todos los registros sin paginar."
@@ -52,13 +56,17 @@ tools:
             Tienda,
             Nombre_Tienda, 
             Fecha_Enviado,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', Hora_de_Carga, 'America/Lima') AS hora_carga,
             ROW_NUMBER() OVER(ORDER BY Fecha_Enviado DESC, sku) AS num_fila
         FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-        WHERE Fecha_Enviado <= CURRENT_DATE("America/Lima")
-          AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+        WHERE (
+            (Fecha_Enviado <= CURRENT_DATE("America/Lima") AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY))
+            OR (Hora_de_Carga >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 31 DAY) AND Fecha_Enviado IS NULL)
+          )
           AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
           AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
           AND (@sku IS NULL OR @sku = '' OR sku = @sku)
+          AND (@placa IS NULL OR @placa = '' OR UPPER(TRIM(Placa)) = UPPER(TRIM(@placa)))
       )
       SELECT 
           tim,
@@ -71,7 +79,8 @@ tools:
           Inventario_Whse, 
           Tienda,
           Nombre_Tienda, 
-          Fecha_Enviado
+          Fecha_Enviado,
+          hora_carga
       FROM datos
       WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
       ORDER BY num_fila
@@ -84,8 +93,8 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Calcula el total de bultos, cajas, unidades, peso total y volumen cargado en un 
-      camión o TIM de despacho hacia una tienda. Ideal para saber qué tan lleno va el camión.
+      Calcula el consolidado de carga por camión (placa) o TIM de despacho hacia una tienda.
+      Devuelve fecha de despacho, hora de carga en CD (hora_carga), bultos, cajas, unidades, peso y volumen.
     parameters:
       - name: tim
         type: integer
@@ -120,6 +129,7 @@ tools:
             Nombre_Tienda,
             Inventario_Whse,
             DATE(Fecha_Enviado) AS fecha_despacho,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MIN(Hora_de_Carga), 'America/Lima') AS hora_carga,
             COUNT(DISTINCT Pallet) AS total_pallets,
             COUNT(DISTINCT sku) AS total_skus_distintos,
             ROUND(SUM(Unidades), 0) AS total_unidades,
@@ -127,9 +137,12 @@ tools:
             ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
             ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
         FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+        WHERE (
+            Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+            OR (Hora_de_Carga >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 31 DAY) AND Fecha_Enviado IS NULL)
+          )
           AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
-          AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
+          AND (@placa IS NULL OR @placa = '' OR UPPER(TRIM(Placa)) = UPPER(TRIM(@placa)))
           AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
           AND (
             (@fecha IS NULL OR @fecha = '')
@@ -144,7 +157,7 @@ tools:
       numerados AS (
         SELECT 
             *,
-            ROW_NUMBER() OVER(ORDER BY fecha_despacho DESC, total_cajas DESC) AS num_fila
+            ROW_NUMBER() OVER(ORDER BY fecha_despacho DESC, hora_carga DESC, total_cajas DESC) AS num_fila
         FROM datos
       )
       SELECT 
@@ -154,6 +167,7 @@ tools:
           Nombre_Tienda,
           Inventario_Whse,
           fecha_despacho,
+          hora_carga,
           total_pallets,
           total_skus_distintos,
           total_unidades,
@@ -256,20 +270,24 @@ tools:
     statement: |
       SELECT 
           tim,
-          Shipment,
+          Shipment, 
           Trf_DO,
           Tipo_DO,
           Placa,
           Tienda,
           Nombre_Tienda,
           Inventario_Whse,
+          FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MIN(Hora_de_Carga), 'America/Lima') AS hora_carga,
           DATE(Fecha_Enviado) AS fecha_despacho,
           COUNT(DISTINCT sku) AS total_skus,
           ROUND(SUM(Unidades), 0) AS total_unidades,
           ROUND(SUM(Cajas), 0) AS total_cajas,
           ROUND(SUM(Peso_Total), 2) AS peso_total_kg
       FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+      WHERE (
+          Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+          OR (Hora_de_Carga >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 31 DAY) AND Fecha_Enviado IS NULL)
+        )
         AND (@shipment IS NULL OR @shipment = '' OR CAST(Shipment AS STRING) = @shipment)
         AND (@trf_do IS NULL OR @trf_do = '' OR CAST(Trf_DO AS STRING) = @trf_do)
       GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
@@ -302,6 +320,70 @@ tools:
       ORDER BY total_despachos_recientes DESC
       LIMIT 10;
 
+  # ----------------------------------------------------
+  # HERRAMIENTA 7: Camiones y TIMs cargados pendientes de despacho
+  # ----------------------------------------------------
+  consultar_cargas_pendientes_despacho:
+    kind: bigquery-sql
+    source: bigquery_logistica_sbx
+    description: >
+      Identifica camiones (placas) y transferencias (TIMs) que ya fueron cargados 
+      en el Centro de Distribución (CD) pero que aún NO cuentan con fecha de envío o salida 
+      (Hora_de_Carga registrada pero Fecha_Enviado es nula o pendiente) hasta el día de hoy. 
+      Permite saber qué camiones están cargados en espera de despacho.
+    parameters:
+      - name: tienda
+        type: string
+        description: "Código ID de la tienda destino (ej. '123', '107'). Opcional para ver todas las tiendas."
+        required: false
+      - name: placa
+        type: string
+        description: "Placa del camión de transporte. Opcional."
+        required: false
+      - name: dias_atras
+        type: integer
+        description: "Días hacia atrás a consultar para cargas pendientes (por defecto 15 días)."
+        required: false
+    statement: |
+      WITH datos AS (
+        SELECT 
+            tim,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MIN(Hora_de_Carga), 'America/Lima') AS hora_carga,
+            COUNT(DISTINCT Pallet) AS total_pallets,
+            COUNT(DISTINCT sku) AS total_skus_distintos,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+            ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+        WHERE Hora_de_Carga IS NOT NULL
+          AND (Fecha_Enviado IS NULL OR Fecha_Enviado > CURRENT_DATE("America/Lima"))
+          AND Hora_de_Carga >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL COALESCE(@dias_atras, 15) DAY)
+          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
+          AND (@placa IS NULL OR @placa = '' OR UPPER(TRIM(Placa)) = UPPER(TRIM(@placa)))
+        GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse
+      )
+      SELECT 
+          tim,
+          Placa,
+          Tienda,
+          Nombre_Tienda,
+          Inventario_Whse,
+          hora_carga,
+          total_pallets,
+          total_skus_distintos,
+          total_unidades,
+          total_cajas,
+          peso_total_kg,
+          volumen_total_m3
+      FROM datos
+      ORDER BY hora_carga DESC
+      LIMIT 100;
+
 # ==========================================
 # 3. REGISTRO EN EL TOOLSET
 # ==========================================
@@ -313,3 +395,4 @@ toolsets:
     - alertas_vencimiento_transito
     - buscar_por_shipment_o_do
     - buscar_tienda_por_nombre
+    - consultar_cargas_pendientes_despacho

@@ -1,0 +1,31 @@
+{
+  "session_id": "sess_a5c65e3d61",
+  "created_at": "2026-10-05T18:09:37.198552+00:00",
+  "updated_at": "2026-10-05T18:09:37.214127+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T18:09:37.214127+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "me puedes volver a repetir cuantos camiones eran para atocongo?",
+      "ai_response": "Basado en el historial de despachos y transferencias hacia la tienda **Atocongo (ID 107)**, se han registrado **65 camiones distintos** (con un total de 178 transferencias o TIMs asociadas).\n\nAquí tienes el detalle consolidado de los despachos recientes:\n\n| FECHA | PLACA | TIM | CD ORIGEN | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| 2026-10-04 | BXY939 | 676167966 | 676 | 787 | 3,870 | 3,708.09 | 16.41 |\n| 2026-10-03 | CJJ742 | 676167837 | 676 | 1,301 | 5,447 | 5,016.19 | 17.80 |\n| 2026-10-03 | RBC031 | 655429144 | 655 | 840 | 5,291 | 5,272.19 | 14.72 |\n| 2026-10-03 | RBC047 | 655428942 | 655 | 667 | 3,879 | 5,341.67 | 14.57 |\n| 2026-10-03 | RBC001 | 655428906 | 655 | 647 | 6,544 | 12,776.53 | 15.31 |\n| 2026-10-03 | CAS793 | 676167710 | 676 | 521 | 3,052 | 2,079.62 | 8.96 |\n| 2026-10-02 | RBC006 | 655428790 | 655 | 1,885 | 9,402 | 35,880.00 | 19.13 |\n| 2026-10-02 | CJJ742 | 676167636 | 676 | 1,254 | 5,941 | 5,489.86 | 14.41 |\n| 2026-10-02 | BCJ761 | 655428682 | 655 | 910 | 10,782 | 6,537.33 | 22.62 |\n| 2026-10-02 | RBC006 | 655428631 | 655 | 786 | 5,895 | 4,953.74 | 15.07 |\n| 2026-10-01 | CFE879 | 676167334 | 676 | 1,600 | 6,378 | 5,332.81 | 17.44 |\n| 2026-10-01 | CMB927 | 655428272 | 655 | 1,273 | 12,597 | 8,572.33 | 25.21 |\n| 2026-10-01 | RBC016 | 655428219 | 655 | 824 | 5,908 | 14,408.98 | 14.18 |\n| 2026-10-01 | CAO909 | 676167432 | 676 | 447 | 2,414 | 2,152.69 | 8.82 |\n| 2026-09-30 | BHL867 | 676167285 | 676 | 1,208 | 8,696 | 5,708.11 | 19.00 |\n| 2026-09-30 | ACO986 | 655427870 | 655 | 1,082 | 10,746 | 9,745.67 | 28.58 |\n| 2026-09-30 | RBC049 | 655427985 | 655 | 611 | 8,640 | 4,082.54 | 13.64 |\n| 2026-09-30 | CEL926 | 676167264 | 676 | 308 | 1,564 | 1,419.96 | 4.01 |\n\n*(Se omiten los registros complementarios menores o de reenvío individual de cajas para mantener la claridad ejecutiva de los camiones principales, sumando un total de 178 transferencias TIM).* \n\n¿Deseas filtrar los despachos o camiones de alguna fecha en específica?",
+      "tienda_context": "107",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "107"
+          },
+          "result_count": 178,
+          "preview": null
+        }
+      ],
+      "records_count": 178,
+      "error": null
+    }
+  ]
+}

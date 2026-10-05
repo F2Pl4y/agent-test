@@ -36,6 +36,35 @@ class SessionManager:
         # Caché rápida en memoria {session_id: dict}
         self._cache: Dict[str, Dict[str, Any]] = {}
 
+        # Limpieza preventiva automática: purgar sesiones inactivas de más de 3 días
+        try:
+            self.cleanup_old_sessions(max_days=3)
+        except Exception as e:
+            logger.warning(f"Aviso en limpieza de sesiones: {e}")
+
+    def cleanup_old_sessions(self, max_days: int = 3) -> int:
+        """
+        Elimina automáticamente archivos de sesión temporales con más de N días de inactividad
+        para evitar acumulación en disco. (Todo el historial maestro queda en audit_log.jsonl).
+        """
+        deleted_count = 0
+        now = datetime.now(timezone.utc)
+        for p in self.storage_dir.glob("*.json"):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                updated_at_str = data.get("updated_at") or data.get("created_at")
+                if updated_at_str:
+                    updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                    if (now - updated_at).total_seconds() > max_days * 86400:
+                        p.unlink()
+                        deleted_count += 1
+            except Exception:
+                pass
+        if deleted_count > 0:
+            logger.info(f"🧹 Limpieza automática: se depuraron {deleted_count} sesiones inactivas de más de {max_days} días.")
+        return deleted_count
+
     def sanitize_session_id(self, session_id: Optional[str]) -> str:
         """
         Sanitiza el session_id para asegurar que sea seguro contra Path Traversal
@@ -95,6 +124,7 @@ class SessionManager:
             "user_email": user_email or "supervisor@tottus.com.pe",
             "pais": pais,
             "last_tienda": None,
+            "last_fecha": None,
             "total_queries": 0,
             "turns": []
         }
@@ -113,6 +143,20 @@ class SessionManager:
         safe_id = self.sanitize_session_id(session_id)
         session = self.get_or_create_session(safe_id)
         session["last_tienda"] = str(tienda)
+        session["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._persist_to_disk(session)
+
+    def get_last_fecha(self, session_id: str) -> Optional[str]:
+        """Obtiene la última fecha consultada en esta sesión conversacional."""
+        safe_id = self.sanitize_session_id(session_id)
+        session = self.get_or_create_session(safe_id)
+        return session.get("last_fecha")
+
+    def set_last_fecha(self, session_id: str, fecha: str):
+        """Registra la fecha activa en el estado de la sesión."""
+        safe_id = self.sanitize_session_id(session_id)
+        session = self.get_or_create_session(safe_id)
+        session["last_fecha"] = str(fecha)
         session["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._persist_to_disk(session)
 

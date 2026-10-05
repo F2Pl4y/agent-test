@@ -1,0 +1,31 @@
+{
+  "session_id": "sess_112e2da8b7",
+  "created_at": "2026-10-05T18:09:03.444179+00:00",
+  "updated_at": "2026-10-05T18:09:03.459361+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T18:09:03.459361+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "y para angamos?",
+      "ai_response": "Para consultar los despachos, transferencias (TIMs) o camiones hacia la tienda **Angamos (Código 123)**, por favor indícame la **fecha puntual** (por ejemplo: `03.10` o `25 de septiembre`) o el **rango de fechas** (por ejemplo: `del 25 al 30 de septiembre`) que deseas revisar para continuar con la búsqueda.",
+      "tienda_context": "107",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "Angamos"
+          },
+          "result_count": 1,
+          "preview": null
+        }
+      ],
+      "records_count": 1,
+      "error": null
+    }
+  ]
+}

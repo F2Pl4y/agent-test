@@ -152,10 +152,9 @@ class LogisticaAgent:
         """Construye las declaraciones de funciones (OpenAPI/MCP) para Gemini."""
         from google.genai import types
 
-        function_declarations = [
             types.FunctionDeclaration(
                 name="resumen_carga_transporte",
-                description="Consulta y lista las TIMs (transferencias), despachos y camiones enviados a una tienda para una fecha específica o rango de fechas. Devuelve CADA TIM como una fila única con su placa, fecha, total de cajas, unidades, peso y volumen.",
+                description="Consulta y lista las TIMs (transferencias), despachos y camiones (por placa o tienda). Devuelve cada TIM con su placa, fecha de despacho, hora_carga (fecha y hora en que fue cargado en el CD), total de cajas, unidades, peso y volumen.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -169,14 +168,28 @@ class LogisticaAgent:
                 )
             ),
             types.FunctionDeclaration(
+                name="consultar_cargas_pendientes_despacho",
+                description="Consulta camiones (placas) o transferencias (TIMs) que ya fueron cargados en el Centro de Distribución (CD) pero que aún NO han sido despachados o enviados (Hora_de_Carga registrada pero Fecha_Enviado es nula o pendiente) hasta el día de hoy. Usar cuando el usuario pregunte por camiones cargados sin enviar o pendientes de salida.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '123', '107'). Opcional."),
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del camión de transporte. Opcional."),
+                        "dias_atras": types.Schema(type=types.Type.INTEGER, description="Días hacia atrás a consultar para cargas pendientes (por defecto 15 días).")
+                    },
+                    required=[]
+                )
+            ),
+            types.FunctionDeclaration(
                 name="consultar_despachos_logistica",
-                description="Consulta el detalle a nivel de PRODUCTOS / SKUs individuales (artículo por artículo: descripción, unidades) dentro de un TIM específico o para un SKU puntual. Usar SOLO cuando pregunten por productos o artículos.",
+                description="Consulta el detalle a nivel de PRODUCTOS / SKUs individuales (artículo por artículo: descripción, unidades, hora_carga) dentro de un TIM específico o para un SKU/placa puntual. Usar SOLO cuando pregunten por productos o artículos.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM logístico para ver sus productos (ej. 655425244)."),
                         "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda (ej. '123', '114')."),
                         "sku": types.Schema(type=types.Type.STRING, description="Código SKU puntual."),
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo puntual."),
                         "pagina": types.Schema(type=types.Type.INTEGER, description="Opcional. Número de página específica solo si el usuario pide paginación explícita. Dejar nulo para traer todos los registros.")
                     },
                     required=[]
@@ -254,6 +267,13 @@ class LogisticaAgent:
             "resumen_camiones": "resumen_carga_transporte",
             "resumendespachospordivision": "resumen_despachos_por_division",
             "alertasvencimientotransito": "alertas_vencimiento_transito",
+            "consultarcargaspendientesdespacho": "consultar_cargas_pendientes_despacho",
+            "cargaspendientesdespacho": "consultar_cargas_pendientes_despacho",
+            "cargas_pendientes_despacho": "consultar_cargas_pendientes_despacho",
+            "camiones_pendientes_despacho": "consultar_cargas_pendientes_despacho",
+            "camiones_cargados_pendientes": "consultar_cargas_pendientes_despacho",
+            "cargas_pendientes": "consultar_cargas_pendientes_despacho",
+            "camiones_cargados": "consultar_cargas_pendientes_despacho",
         }
         if clean in aliases:
             return aliases[clean]
@@ -265,13 +285,20 @@ class LogisticaAgent:
             "resumen_despachos_por_division",
             "alertas_vencimiento_transito",
             "buscar_por_shipment_o_do",
-            "buscar_tienda_por_nombre"
+            "buscar_tienda_por_nombre",
+            "consultar_cargas_pendientes_despacho"
         ]:
             if stripped == canonical.replace("_", ""):
                 return canonical
         return name
 
-    async def _execute_mcp_tool(self, tool_name: str, arguments: dict, include_data: bool = False) -> Tuple[List[Dict[str, Any]], ToolExecution]:
+    async def _execute_mcp_tool(
+        self,
+        tool_name: str,
+        arguments: dict,
+        include_data: bool = False,
+        active_fecha: Optional[str] = None
+    ) -> Tuple[List[Dict[str, Any]], ToolExecution]:
         """Ejecuta la herramienta seleccionada a través de Toolbox MCP."""
         canonical_name = self._resolve_tool_name(tool_name)
         if canonical_name != tool_name:
@@ -279,7 +306,7 @@ class LogisticaAgent:
 
         # Asegurar tipo string en identificadores de shipment / trf_do / tienda si vinieron como números
         clean_args = dict(arguments or {})
-        for str_key in ("shipment", "trf_do", "tienda", "sku"):
+        for str_key in ("shipment", "trf_do", "tienda", "sku", "placa"):
             if str_key in clean_args and clean_args[str_key] is not None:
                 clean_args[str_key] = str(clean_args[str_key])
 
@@ -288,6 +315,12 @@ class LogisticaAgent:
         if canonical_name == "consultar_despachos_logistica" and "tienda" in clean_args and "tim" not in clean_args and "sku" not in clean_args:
             logger.info(f"🔄 Redirigiendo consulta de tienda ({clean_args.get('tienda')}) a 'resumen_carga_transporte' para devolver la lista de TIMs consolidadas")
             canonical_name = "resumen_carga_transporte"
+
+        # Si se consulta resumen_carga_transporte para una tienda sin fecha, pero hay una fecha activa en la sesión:
+        if canonical_name == "resumen_carga_transporte" and "tienda" in clean_args and not clean_args.get("fecha") and not clean_args.get("tim") and not clean_args.get("placa"):
+            if active_fecha:
+                logger.info(f"📅 Asociando fecha activa de sesión ({active_fecha}) a consulta de camiones para tienda {clean_args.get('tienda')}")
+                clean_args["fecha"] = active_fecha
 
         # Si la herramienta soporta paginación:
         # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que se traigan todas las páginas completas.
@@ -352,7 +385,15 @@ class LogisticaAgent:
             if active_tienda:
                 session_manager.set_last_tienda(safe_session_id, str(active_tienda))
 
-            prompt_with_context = f"[Contexto de sesión: Tienda ID '{active_tienda}']\n{user_prompt}" if active_tienda else user_prompt
+            active_fecha = session_manager.get_last_fecha(safe_session_id)
+
+            context_items = []
+            if active_tienda:
+                context_items.append(f"Tienda activa: '{active_tienda}'")
+            if active_fecha:
+                context_items.append(f"Fecha previamente consultada: '{active_fecha}'")
+
+            prompt_with_context = f"[Contexto de sesión: {', '.join(context_items)}]\n{user_prompt}" if context_items else user_prompt
 
             # En Google AI Studio la API exige role='user' para respuestas de función; en Vertex AI es 'tool'
             tool_role = "tool" if settings.USE_VERTEXAI else "user"
@@ -405,12 +446,17 @@ class LogisticaAgent:
                     fn_args = dict(call.args or {})
                     logger.info(f"🛠️ [Ronda {round_idx+1}] Gemini decidió ejecutar: '{fn_name}' con args: {fn_args}")
 
-                    rows, exec_log = await self._execute_mcp_tool(fn_name, fn_args, include_data=include_data)
+                    rows, exec_log = await self._execute_mcp_tool(
+                        fn_name,
+                        fn_args,
+                        include_data=include_data,
+                        active_fecha=active_fecha
+                    )
                     tools_executed.append(exec_log)
                     dict_rows = [r for r in rows if isinstance(r, dict)] if rows else []
                     if dict_rows:
                         canonical = self._resolve_tool_name(fn_name)
-                        if canonical in ("resumen_carga_transporte", "consultar_despachos_logistica", "resumen_despachos_por_division", "buscar_por_shipment_o_do", "alertas_vencimiento_transito"):
+                        if canonical in ("resumen_carga_transporte", "consultar_despachos_logistica", "resumen_despachos_por_division", "buscar_por_shipment_o_do", "alertas_vencimiento_transito", "consultar_cargas_pendientes_despacho"):
                             if any(t.tool_name == "buscar_tienda_por_nombre" for t in tools_executed[:-1]) and len(raw_data) <= 5:
                                 raw_data = list(dict_rows)
                             else:
@@ -486,21 +532,22 @@ class LogisticaAgent:
                         placa = r.get("Placa")
                         if placa and placa not in placas_vistas:
                             placas_vistas.add(placa)
-                            fecha = r.get("fecha_despacho") or r.get("Fecha_Enviado", "")
+                            fecha = r.get("fecha_despacho") or r.get("Fecha_Enviado", "Pendiente")
+                            hora_carga = r.get("hora_carga", r.get("Hora_de_Carga", "N/D"))
                             tim = r.get("tim", "N/D")
                             whse = r.get("Inventario_Whse", "N/D")
                             cajas = r.get("total_cajas", r.get("Cajas", 0))
                             unidades = r.get("total_unidades", r.get("Unidades", 0))
                             peso = r.get("peso_total_kg", r.get("Peso_Total", 0))
                             vol = r.get("volumen_total_m3", r.get("Vol_Enviado", 0))
-                            lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg | {vol:,.2f} m³ |")
+                            lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {hora_carga} | {fecha} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg |")
                     
                     if lineas_camiones:
                         tabla = "\n".join(lineas_camiones[:10])
                         final_text = (
                             f"Se consultó el sistema central de transporte. A continuación tienes el detalle de los despachos y camiones encontrados:\n\n"
-                            f"| PLACA | TIM | ORIGEN | CAJAS | UNIDADES | PESO TOTAL | VOLUMEN |\n"
-                            f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                            f"| PLACA | TIM | ORIGEN | HORA CARGA | FECHA DESPACHO | CAJAS | UNIDADES | PESO TOTAL |\n"
+                            f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
                             f"{tabla}\n\n"
                             f"*(Información verificada en el catálogo central de transportes Tottus)*"
                         )
@@ -509,11 +556,15 @@ class LogisticaAgent:
                 else:
                     final_text = "Para la fecha indicada no se registran despachos ni camiones en el sistema de transporte en los últimos 31 días."
 
-            # Recordar tienda si alguna herramienta la utilizó
+            # Recordar tienda y fecha si alguna herramienta las utilizó
             for t in tools_executed:
-                if t.arguments and "tienda" in t.arguments and t.arguments["tienda"]:
-                    active_tienda = str(t.arguments["tienda"])
-                    session_manager.set_last_tienda(safe_session_id, active_tienda)
+                if t.arguments:
+                    if "tienda" in t.arguments and t.arguments["tienda"]:
+                        active_tienda = str(t.arguments["tienda"])
+                        session_manager.set_last_tienda(safe_session_id, active_tienda)
+                    if "fecha" in t.arguments and t.arguments["fecha"]:
+                        active_fecha = str(t.arguments["fecha"])
+                        session_manager.set_last_fecha(safe_session_id, active_fecha)
 
             # Resguardar el intercambio en el almacenamiento persistente de auditoría
             if final_text:
@@ -537,7 +588,8 @@ class LogisticaAgent:
                 "consultar_despachos_logistica",
                 "resumen_despachos_por_division",
                 "buscar_por_shipment_o_do",
-                "alertas_vencimiento_transito"
+                "alertas_vencimiento_transito",
+                "consultar_cargas_pendientes_despacho"
             }
             has_substantive_data = any(t.tool_name in substantive_tools for t in tools_executed)
             is_asking_for_date = any(kw in final_text.lower() for kw in [
