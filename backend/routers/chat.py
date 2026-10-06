@@ -198,30 +198,65 @@ async def clear_cache_endpoint():
     mcp_client.clear_cache()
     return {"status": "ok", "message": "Caché de consultas purgada exitosamente."}
 
+def _verify_auth_header(authorization: Optional[str]):
+    """Valida la credencial del piloto o token de Google para endpoints sensibles."""
+    token = None
+    if authorization:
+        parts = authorization.strip().split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+        elif len(parts) == 1:
+            token = parts[0]
+
+    is_authorized = False
+    if token and settings.PILOT_ACCESS_KEY and secrets.compare_digest(token, settings.PILOT_ACCESS_KEY):
+        is_authorized = True
+
+    if not is_authorized and token and settings.GOOGLE_CLIENT_ID:
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+            google_email = (idinfo.get("email") or "").lower()
+            if google_email.endswith("@tottus.com.pe"):
+                is_authorized = True
+        except Exception:
+            pass
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=401,
+            detail="Acceso denegado: Se requiere autenticación válida para consultar este recurso."
+        )
+
 @router.get("/sessions", response_model=List[SessionSummary], summary="Listar sesiones registradas para auditoría")
-async def list_sessions_endpoint(limit: int = 50) -> List[SessionSummary]:
+async def list_sessions_endpoint(limit: int = 50, authorization: Optional[str] = Header(None)) -> List[SessionSummary]:
     """Lista las sesiones activas y recientes resguardadas en el sistema para auditoría y trazabilidad."""
+    _verify_auth_header(authorization)
     return session_manager.list_recent_sessions(limit=limit)
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail, summary="Consultar trazabilidad completa de una sesión")
-async def get_session_detail_endpoint(session_id: str) -> SessionDetail:
+async def get_session_detail_endpoint(session_id: str, authorization: Optional[str] = Header(None)) -> SessionDetail:
     """Devuelve el historial completo, trazabilidad de herramientas ejecutadas y metadatos de una sesión."""
+    _verify_auth_header(authorization)
     safe_id = session_manager.sanitize_session_id(session_id)
     session = session_manager.get_or_create_session(safe_id)
     return session
 
 @router.delete("/sessions/{session_id}", summary="Eliminar o reiniciar el resguardo de una sesión")
-async def delete_session_endpoint(session_id: str):
+async def delete_session_endpoint(session_id: str, authorization: Optional[str] = Header(None)):
     """Purga la memoria y el archivo de resguardo de una sesión para iniciar una conversación limpia."""
+    _verify_auth_header(authorization)
     safe_id = session_manager.sanitize_session_id(session_id)
     deleted = session_manager.delete_session(safe_id)
     return {"status": "ok", "message": f"Sesión '{safe_id}' purgada con éxito." if deleted else "No se encontró la sesión."}
 
 @router.get("/audit", summary="Bitácora unificada de todas las consultas para gobernanza")
-async def get_audit_log_endpoint(limit: int = 150, user_email: Optional[str] = None):
+async def get_audit_log_endpoint(limit: int = 150, user_email: Optional[str] = None, authorization: Optional[str] = Header(None)):
     """
     Devuelve la cronología unificada de todas las consultas realizadas por TODOS los colaboradores.
-    Permite auditar en una sola vista quién preguntó qué, a qué hora y qué herramientas se ejecutaron.
+    Exige autenticación previa para prevenir fuga de datos o preguntas operativas.
     """
+    _verify_auth_header(authorization)
     return session_manager.get_unified_audit_log(limit=limit, user_email=user_email)
 
