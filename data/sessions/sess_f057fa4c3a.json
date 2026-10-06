@@ -1,0 +1,42 @@
+{
+  "session_id": "sess_f057fa4c3a",
+  "created_at": "2026-10-05T21:08:08.416751+00:00",
+  "updated_at": "2026-10-05T21:08:08.513434+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "474",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T21:08:08.513434+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "y cuantos camiones aun no llegan a la tienda 474?",
+      "ai_response": "Para la tienda **TT Iquitos Mall (Código 474)**, al comenzar con el dígito **\"4\"**, corresponde a una tienda de provincia/oriente con un **Lead Time de transporte de 72 horas (3 días)** desde la fecha de despacho en el CD. \n\nConsiderando la fecha actual (**2026-10-05**), actualmente se encuentran **en tránsito (en camino y pendientes de llegada)** un total de **4 camiones (agrupados en 4 registros de despacho / 3 TIMs)**:\n\n| PLACA (CAMIÓN) | TIM | CD ORIGEN | HORA DE CARGA | FECHA DESPACHO | FECHA ESTIMADA DE LLEGADA | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n| **BED977** | 676167901 | 677 / 676 | 2026-10-04 03:53:19 | 2026-10-04 | 2026-10-07 | 2,649 | 25,189 | 15,577.81 | 37.19 |\n| **BFW986** | 676167942 | 676 / 677 | 2026-10-04 10:11:09 | 2026-10-04 | 2026-10-07 | 2,425 | 12,776 | 12,582.85 | 24.60 |\n| **ABC123** | 692000087 | 692 | 2026-10-03 07:29:47 | 2026-10-03 | 2026-10-06 | 414 | 2,866 | 5,366.71 | 8.08 |\n\n*(Nota: Los despachos previos con fecha 2026-10-02 ya cumplieron su lead time de 72 horas y su llegada estimada era el 2026-10-05).*",
+      "tienda_context": "474",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "474"
+          },
+          "result_count": 1,
+          "preview": null
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "474",
+            "fecha": "2026-10-01",
+            "fecha_fin": "2026-10-05"
+          },
+          "result_count": 8,
+          "preview": null
+        }
+      ],
+      "records_count": 8,
+      "error": null
+    }
+  ]
+}

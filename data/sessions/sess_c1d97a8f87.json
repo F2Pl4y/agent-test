@@ -1,0 +1,81 @@
+{
+  "session_id": "sess_c1d97a8f87",
+  "created_at": "2026-10-05T23:28:36.440052+00:00",
+  "updated_at": "2026-10-05T23:28:36.457658+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T23:28:36.457658+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "Lista de productos del TIM 655423810",
+      "ai_response": "A continuación se detalla la lista de productos (SKUs) y artículos asociados a la **TIM 655423810** (despachada desde el CD el **2026-09-17** en el camión con placa **BWO943**):\n\n| SKU | Descripción | Tienda Destino | DO / Trf_DO | Hora de Carga |\n| :--- | :--- | :--- | :--- | :--- |\n| **41167430** | ZAPATERA NOCE CHOCOLATE PU | F12 (Tienda 92) | 22798333 | 2026-09-17 08:54:44 |\n| **41250364** | VENTILADOR 16 DE PIE 3 EN 1 BLANCO | F12 (Tienda 91) | 22784825 | 2026-09-17 08:54:41 |\n| **41473123** | ZAPATERA BLANCA PU | F12 (Tienda 92) | 22830478 | 2026-09-17 08:54:46 |\n| **41570653** | SOFA CAMA NEGRO L 180 X D 82 X H 73 CM | F12 (Tienda 92) | 22828191 | 2026-09-17 08:54:47 |\n| **42098587** | LICUADORA ACTIVE SENSE 3VEL 5PR | F12 (Tienda 91) | 22821071 | 2026-09-17 08:54:47 |\n| **42115306** | YOGA MAT MORADO | F12 (Tienda 91) | 22813569 | 2026-09-17 08:54:42 |\n| **42148030** | ESCRITORIO BLANCO 2 CAJONES | F12 (Tienda 92) | 22804729 | 2026-09-17 08:54:40 |\n| **42277337** | ESTANTE 7 DIVISIONES BLANCO | F12 (Tienda 92) | 22829123 | 2026-09-17 08:54:42 |\n| **42277338** | BIBLIOTECA 5 DIVISIONES | F12 (Tienda 92) | 22794837 | 2026-09-17 08:54:42 |\n| **42872956** | ROPERO 8 PUERTAS AVELLANA | F12 (Tienda 92) | 22766504 | 2026-09-17 08:54:45 |\n| **42952119** | TETERA 3.5L ACERO INOX | F12 (Tienda 91) | 22828715 | 2026-09-17 08:54:45 |\n| **42961476** | ESTANTE 3 DIVISIONES BLANCO | F12 (Tienda 91) | 22820618 | 2026-09-17 08:54:43 |\n| **43007138** | ROPERO 3 PUERTAS AMARULA PU | F12 (Tienda 92) | 22794837 | 2026-09-17 08:54:44 |\n| **43121318** | ROPERO 3 PUERTAS CORRED CN ESPEJO BLANCO | F12 (Tienda 92) | 22828098 | 2026-09-17 08:54:41 |\n| **43217086** | SALERO PIMENTERO DE VIDRIO CON RACK | F12 (Tienda 91) | 22813569 | 2026-09-17 08:54:42 |\n| **43238578** | ROPERO 6 PUER 2 CAJO OFF WHITE | F12 (Tienda 92) | 22822483 | 2026-09-17 08:54:41 |\n| **43251332** | MULTIUSO 4 PUERTAS OFF WHITE NOGAL | F12 (Tienda 92) | 22829854 | 2026-09-17 08:54:44 |\n| **43283034** | MULTIFUNCIONAL HP SMART TANK 581 | F12 (Tienda 91) | 22827396 | 2026-09-17 08:54:45 |\n| **43310592** | COLCHON 2 PLAZAS 2 ALMOHADAS E INFLADOR MANUAL | F12 (Tienda 91) | 22831296 | 2026-09-17 08:54:42 |\n| **43337119** | ZAPATERA 3 NIVELES 60X23X115CM | F12 (Tienda 92) | 22828098 | 2026-09-17 08:54:46 |\n| **43410218** | FREIDORA DE AIRE DIGITAL OSTER 7.5L VENT | F12 (Tienda 91) | 22810445 | 2026-09-17 08:47:59 |\n| **43475011** | MESA DE TV 50 VENECIA SONOMA 47X120X34CM | F12 (Tienda 91) | 22808394 | 2026-09-17 08:54:45 |\n| **43491837** | CAMA AMERICANA ACQ 1PLZ+SOFA CAMA | F12 (Folios) | 25972307102 | 2026-09-17 08:54:46 |\n| **43528730** | COMBO CAMA ACQUA 1.5PLZ + ESCRIT BLANC | F12 (Tienda 92) | 22820676 | 2026-09-17 08:54:45 |\n| **43534903** | TV 55 MINI LED 4K GOOGLE TV | F12 (Tienda 92) | 22818808 | 2026-09-17 08:54:42 |\n| **43542286** | ARROCERA OSTER 1.8L DIAMONDFORCE SAKE | F12 (Tienda 91) | 22797138 | 2026-09-17 08:54:46 |\n| **43549875** | WEB ZAPATILLA CLA VELCRO NA 22 27 FUC 26 | F12 (Tienda 91) | 22805842 | 2026-09-17 08:54:42 |\n| **43549989** | WEB ZAPATILLA DEPORTIVA NO 22 27 BLA 25 | F12 (Tienda 91) | 22823155 | 2026-09-17 08:54:46 |\n| **43549995** | WEB ZAPATILLA DEPORTIVA NO 22 27 NAV 25 | F12 (Tienda 91) | 22823155 | 2026-09-17 08:54:46 |\n| **43550008** | WEB ZAPATILLA DEPORTIVA NO 28 33 GRE 32 | F12 (Tienda 91) | 22826148 | 2026-09-17 08:54:43 |\n| **43553608** | ROPERO 6 PUERTAS 1 CAJ 1 ZAPATERA CAST | F12 (Tienda 92) | 22817803 | 2026-09-17 08:47:53 |\n| **43555454** | JGO COMEDOR 4P YORK 120X70X75CM | F12 (Tienda 92) | 22828957 | 2026-09-17 08:54:46 |\n| **43564470** | WEB ZAPATILLA URBANA CO 22 27 NA LIL 27 | F12 (Tienda 91) | 22820958 | 2026-09-17 08:54:40 |\n| **43565725** | WEB ZAPATILLA CASUAL TEXTURA DA BEI 37 | F12 (Tienda 91) | 22805842 | 2026-09-17 08:54:42 |\n| **43565766** | WEB BOTA CLASICA PLATAFORMA 28 34 TAU 29 | F12 (Tienda 91) | 22828906 | 2026-09-17 08:54:43 |\n| **43565901** | WEB BOTIN MODA CUADRADA BLA 35 | F12 (Tienda 91) | 22799482 | 2026-09-17 08:54:45 |\n| **43573155** | TV 40 QLED FHD | F12 (Tienda 91) | 22828338 | 2026-09-17 08:54:41 |\n| **43585503** | GALAXY A17 256GB LIGHT BLUE | F12 (Tienda 91) | 22807574 | 2026-09-17 08:54:41 |\n| **43587122** | WEB JOGGER CARGO BO O26 BEIGE 18M | F12 (Tienda 91) | 22813698 | 2026-09-17 08:47:59 |\n| **43587127** | WEB JOGGER CARGO BO DILL 18M | F12 (Tienda 91) | 22810595 | 2026-09-17 08:54:42 |\n| **43587137** | WEB JOGGER CORTES BO COBALT 18M | F12 (Tienda 91) | 22810595 | 2026-09-17 08:54:42 |\n| **43596946** | IPHONE 17 PRO MAX 256GB AZUL | F12 (Tienda 91) | 22818352 | 2026-09-17 08:54:44 |\n| **43605479** | WEB CONJUNTO BUZO NA GREY 10 | F12 (Tienda 91) | 22819257 | 2026-09-17 08:54:40 |\n| **43605760** | WEB PACKX2 POLO MC RIB NA SANDIA/SKY 8 | F12 (Tienda 91) | 22819257 | 2026-09-17 08:54:40 |\n| **43605778** | WEB PACKX2 POLO ML RIB NA LILAC/BUTTER 8 | F12 (Tienda 91) | 22819257 | 2026-09-17 08:54:40 |",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "consultar_despachos_logistica",
+          "arguments": {
+            "tim": 655423810
+          },
+          "result_count": 95,
+          "preview": [
+            {
+              "tim": 655423810,
+              "Shipment": "90327672",
+              "Placa": "BWO943",
+              "sku": "41167430",
+              "Descripcion": "ZAPATERA NOCE CHOCOLATE PU",
+              "Trf_DO": "22798333",
+              "Tipo_DO": "DOFFP",
+              "Inventario_Whse": "655",
+              "Tienda": "92",
+              "Nombre_Tienda": "F12",
+              "Fecha_Enviado": "2026-09-17",
+              "hora_carga": "2026-09-17 08:54:44",
+              "lead_time_horas": 96,
+              "fecha_estimada_llegada": "2026-09-21 08:54:44"
+            },
+            {
+              "tim": 655423810,
+              "Shipment": "90327672",
+              "Placa": "BWO943",
+              "sku": "41167430",
+              "Descripcion": "ZAPATERA NOCE CHOCOLATE PU",
+              "Trf_DO": "22798333",
+              "Tipo_DO": "DOFFP",
+              "Inventario_Whse": "655",
+              "Tienda": "92",
+              "Nombre_Tienda": "F12",
+              "Fecha_Enviado": "2026-09-17",
+              "hora_carga": "2026-09-17 08:54:41",
+              "lead_time_horas": 96,
+              "fecha_estimada_llegada": "2026-09-21 08:54:41"
+            },
+            {
+              "tim": 655423810,
+              "Shipment": "90327672",
+              "Placa": "BWO943",
+              "sku": "41250364",
+              "Descripcion": "VENTILADOR 16 DE PIE 3 EN 1 BLANCO",
+              "Trf_DO": "22784825",
+              "Tipo_DO": "DOFFP",
+              "Inventario_Whse": "655",
+              "Tienda": "91",
+              "Nombre_Tienda": "F12",
+              "Fecha_Enviado": "2026-09-17",
+              "hora_carga": "2026-09-17 08:54:41",
+              "lead_time_horas": 96,
+              "fecha_estimada_llegada": "2026-09-21 08:54:41"
+            }
+          ]
+        }
+      ],
+      "records_count": 95,
+      "error": null
+    }
+  ]
+}

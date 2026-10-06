@@ -1,0 +1,32 @@
+{
+  "session_id": "sess_18e773cddb",
+  "created_at": "2026-10-05T21:38:44.651556+00:00",
+  "updated_at": "2026-10-05T21:38:44.664977+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "474",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T21:38:44.664977+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "¿Qué camión llevó la TIM 655423616?",
+      "ai_response": "Para la **TIM 655423616**, los datos de despacho registrados son los siguientes:\n\n| Placa (Camión) | TIM | Tienda Destino | CD Origen | Hora de Carga | Fecha Despacho | Cajas | Unidades | Peso Total (kg) | Volumen (m³) |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| **AJZ981** | 655423616 | 451 (HTO Huanuco) | 655 | 2026-09-16 15:06:35 | 2026-09-16 | 4 | 7 | 18.14 | 0.08 |\n\nEl camión encargado de llevar esta transferencia fue el de placa **AJZ981** con destino a la tienda **451 (HTO Huanuco)**.",
+      "tienda_context": "474",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tim": 655423616
+          },
+          "result_count": 1,
+          "preview": null
+        }
+      ],
+      "records_count": 1,
+      "error": null
+    }
+  ]
+}

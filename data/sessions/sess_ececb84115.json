@@ -1,0 +1,23 @@
+{
+  "session_id": "sess_ececb84115",
+  "created_at": "2026-10-05T20:17:57.790409+00:00",
+  "updated_at": "2026-10-05T20:17:57.811037+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T20:17:57.811037+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "¿cuándo se cargó la tim 655423810?",
+      "ai_response": "Error en procesamiento: Error MCP en 'resumen_carga_transporte': error processing GCP request: failed to insert dry run job: googleapi: Error 400: Cannot query over table 'tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS' without a filter over column(s) 'Fecha_Enviado' that can be used for partition elimination, invalidQuery",
+      "tienda_context": "107",
+      "tools_executed": [],
+      "records_count": 0,
+      "error": "Error MCP en 'resumen_carga_transporte': error processing GCP request: failed to insert dry run job: googleapi: Error 400: Cannot query over table 'tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS' without a filter over column(s) 'Fecha_Enviado' that can be used for partition elimination, invalidQuery"
+    }
+  ]
+}

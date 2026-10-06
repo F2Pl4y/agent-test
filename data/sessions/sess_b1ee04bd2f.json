@@ -1,0 +1,101 @@
+{
+  "session_id": "sess_b1ee04bd2f",
+  "created_at": "2026-10-05T23:37:43.258555+00:00",
+  "updated_at": "2026-10-05T23:37:43.285211+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "474",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T23:37:43.285211+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "Cuantos camiones se cargaron el dia de ayer para la tienda 474?",
+      "ai_response": "Para la tienda **TT IQUITOS MALL (Código 474)**, el día de ayer (**2026-10-04**) se cargaron y despacharon **2 camiones** (placas distintas) distribuidos en **2 transferencias (TIMs)**.\n\n**Resumen operativo:**\n• **Total de camiones (placas distintas):** 2 (`BFW986`, `BED977`)\n• **Total de transferencias (TIMs):** 2 (`676167942`, `676167901`)\n• **Total de cajas:** 5,074\n• **Total de unidades:** 37,965\n• **Peso total:** 28,160.66 kg\n• **Volumen total:** 61.79 m³\n\nAl ser una tienda de oriente/provincia, el lead time de transporte es de **72 horas (3 días)**, calculándose la llegada estimada aproximadamente **72 horas después de la hora de carga** de cada camión registrada en el CD.\n\n| # | PLACA (CAMIÓN) | TIM | CD ORIGEN | HORA DE CARGA | FECHA DESPACHO | FECHA ESTIMADA DE LLEGADA | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | `BFW986` | 676167942 | 676 / 677 | 2026-10-04 10:11:09 | 2026-10-04 | 2026-10-07 10:11:09 | 2,425 | 12,776 | 12,582.85 | 24.60 |\n| 2 | `BED977` | 676167901 | 677 / 676 | 2026-10-04 03:53:19 | 2026-10-04 | 2026-10-07 03:53:19 | 2,649 | 25,189 | 15,577.81 | 37.19 |",
+      "tienda_context": "474",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "474"
+          },
+          "result_count": 1,
+          "preview": [
+            {
+              "tienda_id": "474",
+              "Nombre_Tienda": "TT IQUITOS MALL",
+              "total_despachos_recientes": 48,
+              "ultimo_despacho_registrado": "2026-10-04",
+              "lead_time_horas": 96
+            }
+          ]
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "fecha": "2026-10-04",
+            "tienda": "474"
+          },
+          "result_count": 4,
+          "preview": [
+            {
+              "tim": 676167942,
+              "Placa": "BFW986",
+              "Tienda": "474",
+              "Nombre_Tienda": "TT IQUITOS MALL",
+              "Inventario_Whse": "676",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 10:11:09",
+              "lead_time_horas": 72,
+              "fecha_estimada_llegada": "2026-10-07 10:11:09",
+              "total_pallets": 0,
+              "total_skus_distintos": 27,
+              "total_unidades": 2327,
+              "total_cajas": 1098,
+              "peso_total_kg": 4654.43,
+              "volumen_total_m3": 1.5
+            },
+            {
+              "tim": 676167942,
+              "Placa": "BFW986",
+              "Tienda": "474",
+              "Nombre_Tienda": "TT IQUITOS MALL",
+              "Inventario_Whse": "677",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 09:09:23",
+              "lead_time_horas": 72,
+              "fecha_estimada_llegada": "2026-10-07 09:09:23",
+              "total_pallets": 0,
+              "total_skus_distintos": 117,
+              "total_unidades": 10449,
+              "total_cajas": 1327,
+              "peso_total_kg": 7928.42,
+              "volumen_total_m3": 23.1
+            },
+            {
+              "tim": 676167901,
+              "Placa": "BED977",
+              "Tienda": "474",
+              "Nombre_Tienda": "TT IQUITOS MALL",
+              "Inventario_Whse": "677",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 03:53:19",
+              "lead_time_horas": 72,
+              "fecha_estimada_llegada": "2026-10-07 03:53:19",
+              "total_pallets": 0,
+              "total_skus_distintos": 240,
+              "total_unidades": 20603,
+              "total_cajas": 2143,
+              "peso_total_kg": 10823.19,
+              "volumen_total_m3": 24.05
+            }
+          ]
+        }
+      ],
+      "records_count": 4,
+      "error": null
+    }
+  ]
+}

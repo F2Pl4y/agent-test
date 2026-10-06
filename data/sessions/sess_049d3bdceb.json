@@ -1,0 +1,90 @@
+{
+  "session_id": "sess_049d3bdceb",
+  "created_at": "2026-10-05T23:07:09.460989+00:00",
+  "updated_at": "2026-10-05T23:07:09.473974+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T23:07:09.473974+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "Cuantos camiones estan pendientes de entregar mercaderia a la tienda 123?",
+      "ai_response": "Para la tienda **Angamos (Código 123)**, al ser una tienda local, el lead time oficial de transporte es de **24 horas**, calculándose la llegada estimada aproximadamente **24 horas después de la hora de carga** de cada camión registrada en el CD.\n\nActualmente se encuentran **23 camiones (placas distintas)** en ruta o pendientes de entrega de mercadería hacia la tienda 123 (correspondientes a los despachos más recientes registrados desde el Centro de Distribución):\n\n**Resumen operativo:**\n• **Total de camiones (placas distintas):** 23 (`BFX933`, `BHL888`, `RBC016`, `RBC034`, `AUZ718`, `BHL867`, `CNN811`, `RBC050`, `RBC028`, `CMU738`, `RBC024`, `APD875`, `RBC031`, `RBC026`, `CAK835`, `CPD850`, `CJK791`, `RBC027`, `RBC014`, `CDU712`, `C9P902`, `F9H719`, `RBC021`)\n• **Total de transferencias (TIMs):** 50\n• **Total de cajas:** 38,767\n• **Total de unidades:** 271,854\n• **Peso total:** 203,799.36 kg\n• **Volumen total:** 613.62 m³",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "123"
+          },
+          "result_count": 1,
+          "preview": [
+            {
+              "tienda_id": "123",
+              "Nombre_Tienda": "Angamos",
+              "total_despachos_recientes": 199,
+              "ultimo_despacho_registrado": "2026-10-04"
+            }
+          ]
+        },
+        {
+          "tool_name": "consultar_cargas_pendientes_despacho",
+          "arguments": {
+            "tienda": "123"
+          },
+          "result_count": 50,
+          "preview": [
+            {
+              "tim": 655429172,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "hora_carga": "2026-10-04 23:53:33",
+              "total_pallets": 0,
+              "total_skus_distintos": 9,
+              "total_unidades": 10,
+              "total_cajas": 4,
+              "peso_total_kg": 12.96,
+              "volumen_total_m3": 0.07
+            },
+            {
+              "tim": 655429171,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "hora_carga": "2026-10-04 23:43:38",
+              "total_pallets": 0,
+              "total_skus_distintos": 15,
+              "total_unidades": 34,
+              "total_cajas": 11,
+              "peso_total_kg": 6.36,
+              "volumen_total_m3": 0.05
+            },
+            {
+              "tim": 655429170,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "hora_carga": "2026-10-04 23:40:21",
+              "total_pallets": 0,
+              "total_skus_distintos": 16,
+              "total_unidades": 25,
+              "total_cajas": 17,
+              "peso_total_kg": 16.62,
+              "volumen_total_m3": 0.07
+            }
+          ]
+        }
+      ],
+      "records_count": 50,
+      "error": null
+    }
+  ]
+}

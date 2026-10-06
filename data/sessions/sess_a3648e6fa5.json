@@ -1,0 +1,49 @@
+{
+  "session_id": "sess_a3648e6fa5",
+  "created_at": "2026-10-05T20:56:45.177686+00:00",
+  "updated_at": "2026-10-05T20:56:45.252781+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "454",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T20:56:45.252781+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "como se llama la tienda 454?",
+      "ai_response": "No se ha encontrado ninguna tienda registrada con el código **454** en nuestra base de datos logística. \n\n¿Podrías indicarme el nombre comercial de la tienda o verificar el código para poder ayudarte con su ubicación y sus consultas de despacho?",
+      "tienda_context": "454",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "454"
+          },
+          "result_count": 0,
+          "preview": null
+        },
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "Huánuco"
+          },
+          "result_count": 0,
+          "preview": null
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "fecha": "2026-10-01",
+            "tienda": "454"
+          },
+          "result_count": 0,
+          "preview": null
+        }
+      ],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

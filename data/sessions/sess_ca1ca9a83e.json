@@ -1,0 +1,40 @@
+{
+  "session_id": "sess_ca1ca9a83e",
+  "created_at": "2026-10-05T20:00:52.214739+00:00",
+  "updated_at": "2026-10-05T20:00:52.233969+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "107",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T20:00:52.233969+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "¿cuando se cargo la tim 655428906?",
+      "ai_response": "No se encontraron registros en el sistema para la TIM **655428906** (ni como número de transferencia ni como DO/Shipment). \n\nPor favor, verifica el número de la TIM ingresada o indícame la placa o tienda asociada para realizar una búsqueda complementaria.",
+      "tienda_context": "107",
+      "tools_executed": [
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tim": 655428906
+          },
+          "result_count": 0,
+          "preview": null
+        },
+        {
+          "tool_name": "buscar_por_shipment_o_do",
+          "arguments": {
+            "trf_do": "655428906"
+          },
+          "result_count": 0,
+          "preview": null
+        }
+      ],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

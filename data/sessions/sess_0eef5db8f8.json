@@ -1,0 +1,110 @@
+{
+  "session_id": "sess_0eef5db8f8",
+  "created_at": "2026-10-05T23:22:33.334303+00:00",
+  "updated_at": "2026-10-05T23:22:33.359462+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T23:22:33.359462+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "Cuantos camiones estan pendientes de entregar mercaderia a la tienda 123?",
+      "ai_response": "Para la tienda **Angamos (Código 123)**, considerando los despachos recientes de los últimos días (con fecha de despacho **2026-10-04**), se encuentran **2 camiones en tránsito / pendientes de entrega** (que corresponden a 4 transferencias / TIMs).\n\n**Resumen operativo:**\n• **Total de camiones (placas distintas):** 2 (`BFX933`, `BHL888`)\n• **Total de transferencias (TIMs):** 4\n• **Total de cajas:** 1,248\n• **Total de unidades:** 6,077\n• **Peso total:** 5,163.04 kg\n• **Volumen total:** 24.27 m³\n\n---\n\n### Aclaración de Lead Time y Hora de Carga:\nAl ser una tienda **local**, el lead time de transporte es de **24 horas**, calculándose la llegada estimada aproximadamente **24 horas después de la hora de carga** de cada camión registrada en el CD.\n\n### Detalle de Despachos en Tránsito:\n\n| # | PLACA (CAMIÓN) | TIM | CD ORIGEN | HORA DE CARGA | FECHA DESPACHO | FECHA ESTIMADA DE LLEGADA | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | `BFX933` | 655429172 | 655 | 2026-10-04 23:53:33 | 2026-10-04 | 2026-10-05 23:53:33 | 4 | 10 | 12.96 | 0.07 |\n| 2 | `BFX933` | 655429171 | 655 | 2026-10-04 23:43:38 | 2026-10-04 | 2026-10-05 23:43:38 | 11 | 34 | 6.36 | 0.05 |\n| 3 | `BFX933` | 655429170 | 655 | 2026-10-04 23:40:21 | 2026-10-04 | 2026-10-05 23:40:21 | 17 | 25 | 16.62 | 0.07 |\n| 4 | `BHL888` | 676167891 | 676 | 2026-10-04 00:45:21 | 2026-10-04 | 2026-10-05 00:45:21 | 1,216 | 6,008 | 5,127.10 | 24.08 |",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "123"
+          },
+          "result_count": 1,
+          "preview": [
+            {
+              "tienda_id": "123",
+              "Nombre_Tienda": "Angamos",
+              "total_despachos_recientes": 199,
+              "ultimo_despacho_registrado": "2026-10-04",
+              "lead_time_horas": 96
+            }
+          ]
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "123",
+            "fecha": "2026-10-04"
+          },
+          "result_count": 4,
+          "preview": [
+            {
+              "tim": 655429172,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 23:53:33",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-05 23:53:33",
+              "total_pallets": 0,
+              "total_skus_distintos": 9,
+              "total_unidades": 10,
+              "total_cajas": 4,
+              "peso_total_kg": 12.96,
+              "volumen_total_m3": 0.07
+            },
+            {
+              "tim": 655429171,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 23:43:38",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-05 23:43:38",
+              "total_pallets": 0,
+              "total_skus_distintos": 15,
+              "total_unidades": 34,
+              "total_cajas": 11,
+              "peso_total_kg": 6.36,
+              "volumen_total_m3": 0.05
+            },
+            {
+              "tim": 655429170,
+              "Placa": "BFX933",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-04",
+              "hora_carga": "2026-10-04 23:40:21",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-05 23:40:21",
+              "total_pallets": 0,
+              "total_skus_distintos": 16,
+              "total_unidades": 25,
+              "total_cajas": 17,
+              "peso_total_kg": 16.62,
+              "volumen_total_m3": 0.07
+            }
+          ]
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "tienda": "123",
+            "fecha": "2026-10-05"
+          },
+          "result_count": 0,
+          "preview": null
+        }
+      ],
+      "records_count": 4,
+      "error": null
+    }
+  ]
+}

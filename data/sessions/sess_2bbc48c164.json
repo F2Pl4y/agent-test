@@ -1,0 +1,23 @@
+{
+  "session_id": "sess_2bbc48c164",
+  "created_at": "2026-10-05T22:19:41.099992+00:00",
+  "updated_at": "2026-10-05T22:19:41.115601+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T22:19:41.115601+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "123456",
+      "ai_response": "### 🔄 Protocolo de Reprogramaciones (Órdenes de Compra / OC)\n\nHas ingresado la Orden de Compra: **123456**.\n\nPara validar el estado actual del pedido y definir la acción logística correspondiente, **¿cuál es el estado de este pedido en el sistema?** \n\nPor favor, indícame si se encuentra en alguno de los siguientes estados:\n1. **Registrado**\n2. **En reparto**\n3. **Excepción de entrega** *(si eliges esta, indícame también el tipo de excepción)*\n4. **Fallo de entrega**",
+      "tienda_context": "123",
+      "tools_executed": [],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

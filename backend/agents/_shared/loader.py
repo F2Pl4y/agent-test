@@ -130,14 +130,25 @@ class ToolboxMCPClient:
                     err_msg = resp_json["error"].get("message", str(resp_json["error"]))
                     raise RuntimeError(f"Error MCP en '{tool_name}': {err_msg}")
 
-                content = resp_json.get("result", {}).get("content", [])
+                result_obj = resp_json.get("result", {})
+                if result_obj.get("isError"):
+                    content = result_obj.get("content", [])
+                    err_txt = " ".join([c.get("text", "") for c in content if isinstance(c, dict)])
+                    logger.error(f"❌ Error devuelto por Toolbox MCP en '{tool_name}': {err_txt}")
+                    raise RuntimeError(f"Error MCP en '{tool_name}': {err_txt}")
+
+                content = result_obj.get("content", [])
                 rows = []
                 for item in content:
                     txt = item.get("text", "")
                     try:
-                        rows.append(json.loads(txt))
-                    except Exception:
-                        pass
+                        parsed = json.loads(txt)
+                        if isinstance(parsed, list):
+                            rows.extend(parsed)
+                        elif isinstance(parsed, dict):
+                            rows.append(parsed)
+                    except Exception as parse_err:
+                        logger.warning(f"⚠️ No se pudo parsear fila JSON de '{tool_name}': {txt[:120]} ({parse_err})")
                 return rows
 
         tools_with_pagination = ("consultar_despachos_logistica", "resumen_carga_transporte")

@@ -99,7 +99,7 @@ class SessionManager:
         # 1. Buscar en caché en memoria
         if safe_id in self._cache:
             session = self._cache[safe_id]
-            if user_email and not session.get("user_email"):
+            if user_email and (not session.get("user_email") or session.get("user_email") == "supervisor@tottus.com.pe"):
                 session["user_email"] = user_email
             return session
 
@@ -109,6 +109,8 @@ class SessionManager:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     session = json.load(f)
+                    if user_email and (not session.get("user_email") or session.get("user_email") == "supervisor@tottus.com.pe"):
+                        session["user_email"] = user_email
                     self._cache[safe_id] = session
                     logger.info(f"📂 Sesión '{safe_id}' restaurada exitosamente desde disco ({len(session.get('turns', []))} turnos)")
                     return session
@@ -121,7 +123,7 @@ class SessionManager:
             "session_id": safe_id,
             "created_at": now_iso,
             "updated_at": now_iso,
-            "user_email": user_email or "supervisor@tottus.com.pe",
+            "user_email": user_email or None,
             "pais": pais,
             "last_tienda": None,
             "last_fecha": None,
@@ -160,13 +162,13 @@ class SessionManager:
         session["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._persist_to_disk(session)
 
-    def get_recent_history_for_llm(self, session_id: str, max_turns: int = 6) -> List[Dict[str, str]]:
+    def get_recent_history_for_llm(self, session_id: str, max_turns: int = 10, user_email: Optional[str] = None) -> List[Dict[str, str]]:
         """
         Retorna los últimos N turnos formateados para contexto de Gemini:
         [{"role": "user", "text": "..."}, {"role": "model", "text": "..."}]
         """
         safe_id = self.sanitize_session_id(session_id)
-        session = self.get_or_create_session(safe_id)
+        session = self.get_or_create_session(safe_id, user_email=user_email)
         turns = session.get("turns", [])
         
         recent = turns[-max_turns:] if len(turns) > max_turns else turns
@@ -196,12 +198,20 @@ class SessionManager:
         safe_id = self.sanitize_session_id(session_id)
         session = self.get_or_create_session(safe_id, user_email=user_email, pais=pais or "PE")
         
-        # 🔒 Seguridad y Gobernanza: Si la sesión pertenecía a otro usuario, generar nueva sesión independiente
+        # 🔒 Seguridad y Gobernanza: Si la sesión pertenecía a otro usuario real diferente, crear nueva sesión
         current_owner = session.get("user_email")
-        if current_owner and user_email and current_owner.strip().lower() != user_email.strip().lower():
+        if (
+            current_owner 
+            and user_email 
+            and current_owner.strip().lower() not in ("supervisor@tottus.com.pe", "none", "") 
+            and user_email.strip().lower() not in ("supervisor@tottus.com.pe", "none", "") 
+            and current_owner.strip().lower() != user_email.strip().lower()
+        ):
             logger.info(f"🔄 Cambio de usuario detectado en sesión '{safe_id}' ({current_owner} -> {user_email}). Creando nueva sesión independiente.")
             safe_id = self.sanitize_session_id(f"sess_{uuid.uuid4().hex[:10]}")
             session = self.get_or_create_session(safe_id, user_email=user_email, pais=pais or "PE")
+        elif user_email:
+            session["user_email"] = user_email
 
         now_iso = datetime.now(timezone.utc).isoformat()
         session["updated_at"] = now_iso

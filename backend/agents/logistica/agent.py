@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple, Optional
 
 from backend.config import settings
@@ -152,9 +153,10 @@ class LogisticaAgent:
         """Construye las declaraciones de funciones (OpenAPI/MCP) para Gemini."""
         from google.genai import types
 
+        function_declarations = [
             types.FunctionDeclaration(
                 name="resumen_carga_transporte",
-                description="Consulta y lista las TIMs (transferencias), despachos y camiones (por placa o tienda). Devuelve cada TIM con su placa, fecha de despacho, hora_carga (fecha y hora en que fue cargado en el CD), total de cajas, unidades, peso y volumen.",
+                description="Consulta y lista las TIMs (transferencias), despachos y camiones (por placa o tienda). Devuelve cada TIM con su placa, fecha de despacho, hora_carga, lead_time_horas (24h locales '1xx', 48h provincia '3xx', 72h oriente '4xx', 96h otras), fecha_estimada_llegada a tienda, total de cajas, unidades, peso y volumen.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -233,11 +235,11 @@ class LogisticaAgent:
             ),
             types.FunctionDeclaration(
                 name="buscar_tienda_por_nombre",
-                description="Busca el código numérico ID de una tienda a partir de su nombre comercial (ej. 'Huanuco', 'San Luis', 'Angamos').",
+                description="Busca y valida si una tienda existe en la base de datos por su nombre comercial (ej. 'Huanuco', 'San Luis', 'Angamos') o por su código numérico ID (ej. '123', '451', '454'). Retorna el código y nombre oficial si existe, o lista vacía si NO existe.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "nombre_parcial": types.Schema(type=types.Type.STRING, description="Nombre o texto parcial de la tienda a buscar.")
+                        "nombre_parcial": types.Schema(type=types.Type.STRING, description="Nombre comercial o código numérico ID de la tienda a buscar o validar (ej. 'Huanuco', '123', '454').")
                     },
                     required=["nombre_parcial"]
                 )
@@ -245,6 +247,51 @@ class LogisticaAgent:
         ]
 
         return [types.Tool(function_declarations=function_declarations)]
+
+    def _is_reprogramacion_intent(self, user_prompt: str, recent_turns: list) -> bool:
+        """
+        Detecta si la consulta del usuario o el contexto reciente corresponde
+        al flujo interactivo de Reprogramaciones y Órdenes de Compra (OC).
+        """
+        lowered = user_prompt.lower().strip()
+
+        # Si el usuario hace una consulta logística explícita de camiones/tienda, no es reprogramación
+        logistics_keywords = ["camion", "camiones", "placa", "despacho", "salidas", "inventario", "cajas", "pallets", "peso total"]
+        if any(lk in lowered for lk in logistics_keywords):
+            return False
+
+        reprog_keywords = [
+            "reprogramaci", "orden de compra", "oc ", " oc", "oc:", "oc?", "pedido",
+            "en reparto", "registrado", "fallo de entrega", "excepcion", "excepción",
+            "cliente ausente", "fuera de horario", "fuera de ruta", "direccion",
+            "dirección", "distrito errado", "calle con dificil", "calle con difícil",
+            "siniestro ol", "bodega por", "rechazado por cliente", "zona peligrosa",
+            "requiere maniobra", "más personal", "mas personal", "no se cual es", "no lo se", "no sé"
+        ]
+        if any(k in lowered for k in reprog_keywords):
+            return True
+
+        # Si el usuario responde con un código numérico / alfanumérico corto o respuesta en flujo de reprogramación
+        if recent_turns:
+            for turn in reversed(recent_turns[-4:]):
+                txt = turn.get("text", "").lower()
+                if any(k in txt for k in [
+                    "indícame el estado del pedido",
+                    "indicame el estado del pedido",
+                    "envíame la oc",
+                    "enviame la oc",
+                    "orden de compra",
+                    "reprogramaci",
+                    "excepción de entrega",
+                    "excepcion de entrega",
+                    "tipo de excepción",
+                    "tipo de excepcion",
+                    "acción requerida",
+                    "accion requerida"
+                ]):
+                    return True
+
+        return False
 
     def _resolve_tool_name(self, name: str) -> str:
         """
@@ -306,9 +353,18 @@ class LogisticaAgent:
 
         # Asegurar tipo string en identificadores de shipment / trf_do / tienda si vinieron como números
         clean_args = dict(arguments or {})
-        for str_key in ("shipment", "trf_do", "tienda", "sku", "placa"):
+        for str_key in ("shipment", "trf_do", "tienda", "sku"):
             if str_key in clean_args and clean_args[str_key] is not None:
-                clean_args[str_key] = str(clean_args[str_key])
+                clean_args[str_key] = str(clean_args[str_key]).strip()
+
+        if "placa" in clean_args and clean_args["placa"] is not None:
+            clean_args["placa"] = str(clean_args["placa"]).strip().upper()
+
+        if "tim" in clean_args and clean_args["tim"] is not None:
+            try:
+                clean_args["tim"] = int(clean_args["tim"])
+            except Exception:
+                pass
 
         # Si Gemini invocó consultar_despachos_logistica pero solo con 'tienda' (sin tim ni sku),
         # significa que se están buscando las TIMs/despachos de la tienda, no los artículos individuales.
@@ -332,6 +388,7 @@ class LogisticaAgent:
             fetch_all = False
 
         rows = await mcp_client.call_tool(canonical_name, clean_args, fetch_all_pages=fetch_all)
+        rows = self._enrich_rows_with_arrival_estimates(rows)
 
         execution_record = ToolExecution(
             tool_name=canonical_name,
@@ -340,6 +397,55 @@ class LogisticaAgent:
             preview=rows[:3] if (include_data and rows) else None
         )
         return rows, execution_record
+
+    def _enrich_rows_with_arrival_estimates(self, rows: list) -> list:
+        """
+        Enriquece cada registro de despacho/camión con el cálculo preciso
+        de Lead Time y Fecha Estimada de Llegada a partir de su hora_carga o fecha_despacho.
+        """
+        if not rows:
+            return rows
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            tienda = str(r.get("Tienda") or r.get("tienda") or "")
+            if tienda.startswith("1"):
+                lt = 24
+            elif tienda.startswith("3"):
+                lt = 48
+            elif tienda.startswith("4"):
+                lt = 72
+            else:
+                lt = 96
+            r["lead_time_horas"] = lt
+
+            hora_carga = r.get("hora_carga") or r.get("Hora_de_Carga")
+            fecha_desp = r.get("fecha_despacho") or r.get("Fecha_Enviado")
+            fecha_est = None
+
+            if hora_carga:
+                try:
+                    clean_hc = str(hora_carga).strip()
+                    if "." in clean_hc:
+                        clean_hc = clean_hc.split(".")[0]
+                    dt = datetime.strptime(clean_hc, "%Y-%m-%d %H:%M:%S")
+                    dt_llegada = dt + timedelta(hours=lt)
+                    fecha_est = dt_llegada.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
+
+            if not fecha_est and fecha_desp:
+                try:
+                    clean_fd = str(fecha_desp).strip()[:10]
+                    d = datetime.strptime(clean_fd, "%Y-%m-%d")
+                    d_llegada = d + timedelta(days=(lt // 24))
+                    fecha_est = d_llegada.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+
+            if fecha_est:
+                r["fecha_estimada_llegada"] = fecha_est
+        return rows
 
     async def run(
         self,
@@ -374,32 +480,45 @@ class LogisticaAgent:
         try:
             from google.genai import types
 
-            tools = self._build_tools_declaration()
-            config = types.GenerateContentConfig(
-                system_instruction=get_system_instruction_logistica(),
-                tools=tools,
-                temperature=0.0  # Respuesta determinista y precisa
-            )
+            # Cargar historial conversacional previo de la sesión (recuperado de disco o memoria)
+            recent_turns = session_manager.get_recent_history_for_llm(safe_session_id, max_turns=10, user_email=user_email)
+            is_reprog = self._is_reprogramacion_intent(user_prompt, recent_turns)
 
-            active_tienda = tienda_id or session_manager.get_last_tienda(safe_session_id)
-            if active_tienda:
-                session_manager.set_last_tienda(safe_session_id, str(active_tienda))
+            if is_reprog:
+                logger.info("📦 Flujo de Reprogramaciones/OC activo: desactivando herramientas MCP para respuesta determinista según protocolo.")
+                tools = []
+                config = types.GenerateContentConfig(
+                    system_instruction=get_system_instruction_logistica(),
+                    tools=None,
+                    temperature=0.2
+                )
+                prompt_with_context = user_prompt
+                active_tienda = None
+            else:
+                tools = self._build_tools_declaration()
+                config = types.GenerateContentConfig(
+                    system_instruction=get_system_instruction_logistica(),
+                    tools=tools,
+                    temperature=0.0  # Respuesta determinista y precisa
+                )
 
-            active_fecha = session_manager.get_last_fecha(safe_session_id)
+                active_tienda = tienda_id or session_manager.get_last_tienda(safe_session_id)
+                if active_tienda:
+                    session_manager.set_last_tienda(safe_session_id, str(active_tienda))
 
-            context_items = []
-            if active_tienda:
-                context_items.append(f"Tienda activa: '{active_tienda}'")
-            if active_fecha:
-                context_items.append(f"Fecha previamente consultada: '{active_fecha}'")
+                active_fecha = session_manager.get_last_fecha(safe_session_id)
 
-            prompt_with_context = f"[Contexto de sesión: {', '.join(context_items)}]\n{user_prompt}" if context_items else user_prompt
+                context_items = []
+                if active_tienda:
+                    context_items.append(f"Tienda activa: '{active_tienda}'")
+                if active_fecha:
+                    context_items.append(f"Fecha previamente consultada: '{active_fecha}'")
+
+                prompt_with_context = f"[Contexto de sesión: {', '.join(context_items)}]\n{user_prompt}" if context_items else user_prompt
 
             # En Google AI Studio la API exige role='user' para respuestas de función; en Vertex AI es 'tool'
             tool_role = "tool" if settings.USE_VERTEXAI else "user"
 
-            # Cargar historial conversacional previo de la sesión (recuperado de disco o memoria)
-            recent_turns = session_manager.get_recent_history_for_llm(safe_session_id, max_turns=6)
             turn_contents = []
             for item in recent_turns:
                 turn_contents.append(
@@ -410,7 +529,7 @@ class LogisticaAgent:
             )
             final_text = ""
 
-            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (sesión={safe_session_id}, tienda={active_tienda}, historial={len(recent_turns)} msgs)")
+            logger.info(f"🤖 Procesando consulta: '{user_prompt}' (sesión={safe_session_id}, tienda={active_tienda}, reprogramación={is_reprog}, historial={len(recent_turns)} msgs)")
 
             # Bucle de razonamiento multi-paso (hasta 5 rondas de herramientas para razonamiento profundo)
             for round_idx in range(5):
@@ -504,7 +623,7 @@ class LogisticaAgent:
                     types.Content(
                         role="user",
                         parts=[types.Part.from_text(
-                            text="Con los datos obtenidos anteriormente de las herramientas, redacta ahora la respuesta ejecutiva final en lenguaje natural respondiendo de manera precisa a la consulta del usuario."
+                            text="Con los datos obtenidos anteriormente de las herramientas, redacta ahora la respuesta ejecutiva final respondiendo con precisión a la consulta del usuario. REGLA ESTRICTA: Coloca el bloque de 'Resumen operativo' (totales de camiones, TIMs, cajas, unidades y peso) SIEMPRE ARRIBA de la tabla, e incluye en la tabla la columna de 'Fecha Estimada de Llegada' calculada aproximadamente según el Lead Time de la tienda a partir de la hora de carga de cada camión."
                         )]
                     )
                 )
@@ -528,26 +647,41 @@ class LogisticaAgent:
                     # Construir tabla ejecutiva automática con los camiones recuperados
                     lineas_camiones = []
                     placas_vistas = set()
+                    sum_cajas = 0
+                    sum_unidades = 0
+                    sum_peso = 0.0
                     for r in raw_data:
+                        cajas = r.get("total_cajas", r.get("Cajas", 0)) or 0
+                        unidades = r.get("total_unidades", r.get("Unidades", 0)) or 0
+                        peso = r.get("peso_total_kg", r.get("Peso_Total", 0)) or 0.0
+                        sum_cajas += cajas
+                        sum_unidades += unidades
+                        sum_peso += peso
                         placa = r.get("Placa")
                         if placa and placa not in placas_vistas:
                             placas_vistas.add(placa)
-                            fecha = r.get("fecha_despacho") or r.get("Fecha_Enviado", "Pendiente")
-                            hora_carga = r.get("hora_carga", r.get("Hora_de_Carga", "N/D"))
-                            tim = r.get("tim", "N/D")
-                            whse = r.get("Inventario_Whse", "N/D")
-                            cajas = r.get("total_cajas", r.get("Cajas", 0))
-                            unidades = r.get("total_unidades", r.get("Unidades", 0))
-                            peso = r.get("peso_total_kg", r.get("Peso_Total", 0))
-                            vol = r.get("volumen_total_m3", r.get("Vol_Enviado", 0))
-                            lineas_camiones.append(f"| **`{placa}`** | `{tim}` | {whse} | {hora_carga} | {fecha} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg |")
+                        fecha = r.get("fecha_despacho") or r.get("Fecha_Enviado", "Pendiente")
+                        hora_carga = r.get("hora_carga", r.get("Hora_de_Carga", "N/D"))
+                        tim = r.get("tim", "N/D")
+                        whse = r.get("Inventario_Whse", "N/D")
+                        fecha_est = r.get("fecha_estimada_llegada", "N/D")
+                        lineas_camiones.append(f"| {len(lineas_camiones)+1} | **`{placa or 'N/D'}`** | `{tim}` | {whse} | {hora_carga} | {fecha} | {fecha_est} | {cajas:,.0f} | {unidades:,.0f} | {peso:,.2f} kg |")
                     
                     if lineas_camiones:
-                        tabla = "\n".join(lineas_camiones[:10])
+                        tabla = "\n".join(lineas_camiones[:15])
+                        placas_lista = ", ".join(f"`{p}`" for p in sorted(placas_vistas))
                         final_text = (
-                            f"Se consultó el sistema central de transporte. A continuación tienes el detalle de los despachos y camiones encontrados:\n\n"
-                            f"| PLACA | TIM | ORIGEN | HORA CARGA | FECHA DESPACHO | CAJAS | UNIDADES | PESO TOTAL |\n"
-                            f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                            f"Se consultó el sistema central de transporte con los siguientes resultados:\n\n"
+                            f"**Resumen operativo:**\n"
+                            f"• **Total de camiones (placas distintas):** {len(placas_vistas)} ({placas_lista})\n"
+                            f"• **Total de transferencias (TIMs):** {len(raw_data)}\n"
+                            f"• **Total de cajas:** {sum_cajas:,.0f}\n"
+                            f"• **Total de unidades:** {sum_unidades:,.0f}\n"
+                            f"• **Peso total:** {sum_peso:,.2f} kg\n\n"
+                            f"*(El lead time estimado se calcula a partir de la hora de carga de cada camión en patio)*\n\n"
+                            f"A continuación el detalle de los despachos:\n\n"
+                            f"| # | PLACA (CAMIÓN) | TIM | CD ORIGEN | HORA DE CARGA | FECHA DESPACHO | FECHA ESTIMADA DE LLEGADA | CAJAS | UNIDADES | PESO TOTAL (KG) |\n"
+                            f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
                             f"{tabla}\n\n"
                             f"*(Información verificada en el catálogo central de transportes Tottus)*"
                         )

@@ -1,0 +1,32 @@
+{
+  "session_id": "sess_32433cf10a",
+  "created_at": "2026-10-05T22:09:01.892045+00:00",
+  "updated_at": "2026-10-05T22:09:01.905166+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-05T22:09:01.905166+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "¿Hay productos perecibles por vencer en camino a Huánuco?",
+      "ai_response": "El código o nombre de tienda **Huánuco** no se encuentra registrado en nuestra base de datos logística de Tottus. Por favor verifica el número de local o indícame su nombre comercial correcto para poder ayudarte.",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "Huánuco"
+          },
+          "result_count": 0,
+          "preview": null
+        }
+      ],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}
