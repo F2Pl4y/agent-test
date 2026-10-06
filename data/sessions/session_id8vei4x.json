@@ -1,0 +1,23 @@
+{
+  "session_id": "session_id8vei4x",
+  "created_at": "2026-10-06T13:11:45.491468+00:00",
+  "updated_at": "2026-10-06T13:11:48.207218+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": null,
+  "last_fecha": null,
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-06T13:11:48.207218+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "Quiero realizar una reprogramacion",
+      "ai_response": "Para iniciar el proceso de reprogramación de entrega, por favor **indícame el estado del pedido o facilítame el número de tu Orden de Compra (OC)** para poder revisarlo.",
+      "tienda_context": null,
+      "tools_executed": [],
+      "records_count": 0,
+      "error": null
+    }
+  ]
+}

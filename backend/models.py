@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     tienda_id: Optional[str] = Field(default=None, description="Código de la tienda (ej. '123', '114') si se conoce")
     user_email: Optional[str] = Field(default=None, description="Correo corporativo del usuario autenticado para control de acceso RBAC")
     pais: Optional[str] = Field(default="PE", description="Código del país ('PE' o 'CL')")
+    token: Optional[str] = Field(default=None, description="Token o clave de acceso del piloto (evita header Authorization y CORS preflight)")
     include_data: bool = Field(default=False, description="Si es True, incluye las filas crudas de BigQuery en el campo 'data'. Por defecto False para ahorrar ancho de banda.")
 
 class ToolExecution(BaseModel):

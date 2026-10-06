@@ -70,6 +70,9 @@ async def verify_auth_endpoint(request: VerifyRequest) -> VerifyResponse:
         email=user_email
     )
 
+# Control de Concurrencia por Sesión: impide múltiples consultas simultáneas a BigQuery/Gemini
+_active_chat_sessions: set = set()
+
 @router.post("/chat", response_model=ChatResponse, summary="Enviar consulta conversacional al agente logístico")
 async def chat_endpoint(
     request: ChatRequest,
@@ -107,8 +110,8 @@ async def chat_endpoint(
             )
 
     # 🔒 2. Validación de Credencial (Modo Dual: Clave Piloto o Google OAuth)
-    token = ""
-    if authorization:
+    token = (request.token or "").strip()
+    if not token and authorization:
         parts = authorization.strip().split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
             token = parts[1]
@@ -149,6 +152,14 @@ async def chat_endpoint(
         )
 
     session_id = request.session_id or f"session_{uuid.uuid4().hex[:8]}"
+
+    if session_id in _active_chat_sessions:
+        raise HTTPException(
+            status_code=429,
+            detail="Ya hay una consulta procesándose para esta sesión activa. Por favor, espera un momento a que finalice."
+        )
+
+    _active_chat_sessions.add(session_id)
     try:
         response = await agente_logistica.run(
             user_prompt=request.message,
@@ -163,6 +174,8 @@ async def chat_endpoint(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar la consulta: {str(e)}")
+    finally:
+        _active_chat_sessions.discard(session_id)
 
 @router.get("/tools", summary="Listar catálogo de herramientas MCP activas")
 async def list_tools_endpoint() -> List[Dict[str, Any]]:
@@ -172,17 +185,28 @@ async def list_tools_endpoint() -> List[Dict[str, Any]]:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudo consultar el catálogo MCP: {str(e)}")
 
+import time
+_last_health_check_time = 0.0
+_cached_health_status = (True, [])
+
 @router.get("/health", response_model=HealthResponse, summary="Verificar estado de salud del backend y Toolbox")
 async def health_endpoint() -> HealthResponse:
-    """Verifica la conectividad con el servidor MCP Toolbox y la configuración general."""
-    is_connected = await mcp_client.check_health()
-    tools = []
-    if is_connected:
-        try:
-            mcp_tools = await mcp_client.list_tools()
-            tools = [t.get("name") for t in mcp_tools if "name" in t]
-        except Exception:
-            pass
+    """Verifica la conectividad con el servidor MCP Toolbox con caché ultrarrápida de 60s."""
+    global _last_health_check_time, _cached_health_status
+    now = time.monotonic()
+    if now - _last_health_check_time > 60.0:
+        is_connected = await mcp_client.check_health()
+        tools = []
+        if is_connected:
+            try:
+                mcp_tools = await mcp_client.list_tools()
+                tools = [t.get("name") for t in mcp_tools if "name" in t]
+            except Exception:
+                pass
+        _cached_health_status = (is_connected, tools)
+        _last_health_check_time = now
+    else:
+        is_connected, tools = _cached_health_status
 
     return HealthResponse(
         status="ok" if is_connected else "warning_mcp_unreachable",

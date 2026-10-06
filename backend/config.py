@@ -7,10 +7,11 @@ from dotenv import load_dotenv
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
+
 class Settings:
     # URL del servidor MCP Toolbox
     TOOLBOX_URL: str = os.getenv("TOOLBOX_URL", "http://localhost:5001/mcp")
-    
+
     # Proyectos GCP (leídos dinámicamente desde el archivo local .env)
     @property
     def BIGQUERY_PROJECT(self) -> str:
@@ -23,7 +24,7 @@ class Settings:
         return os.getenv("VERTEXAI_PROJECT", "").strip()
 
     GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    
+
     @property
     def GEMINI_MODEL(self) -> str:
         load_dotenv(dotenv_path=env_path, override=True)
@@ -65,7 +66,10 @@ class Settings:
         if raw.lower() == "all_users":
             return ["all_users"]
         # Limpiar comillas, retornos de carro y saltos de línea
-        cleaned = raw.replace('"', '').replace("'", "").replace("\r", "").replace("\n", ",")
+        cleaned = (
+            raw.replace('"', "").replace("'", "").replace("\r", "").replace("\n", ",")
+        )
         return [u.strip().lower() for u in cleaned.split(",") if u.strip()]
+
 
 settings = Settings()
