@@ -1,0 +1,101 @@
+{
+  "session_id": "session_8otwj4bs",
+  "created_at": "2026-10-07T20:10:53.646122+00:00",
+  "updated_at": "2026-10-07T20:11:09.114391+00:00",
+  "user_email": "fhurtadoa@tottus.com.pe",
+  "pais": "PE",
+  "last_tienda": "123",
+  "last_fecha": "2026-10-06",
+  "total_queries": 1,
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-10-07T20:11:09.114391+00:00",
+      "user_email": "fhurtadoa@tottus.com.pe",
+      "user_message": "quiero saber cuantos camiones se han ido a la tienda de angamos el dia 06.10",
+      "ai_response": "Para la tienda **Angamos (Código 123)**, el día **06.10.2026** se despacharon **3 camiones** (placas distintas) distribuidos en **5 transferencias (TIMs)**.\n\n**Resumen operativo:**\n• **Total de camiones (placas distintas):** 3 (`RBC048`, `BNO874`, `BFX933`)\n• **Total de transferencias (TIMs):** 5\n• **Total de cajas:** 1,529\n• **Total de unidades:** 18,430\n• **Peso total:** 25,424.31 kg\n\nAl ser una tienda local, el lead time de transporte es de **24 horas**, calculándose la llegada estimada aproximadamente **24 horas después de la hora de carga** de cada camión registrada en el CD.\n\n| # | PLACA (CAMIÓN) | TIM | CD ORIGEN | HORA DE CARGA | FECHA DESPACHO | FECHA ESTIMADA DE LLEGADA | CAJAS | UNIDADES | PESO TOTAL (KG) | VOLUMEN (M³) |\n|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | `RBC048` | 655429676 | 655 | 2026-10-06 18:08:21 | 2026-10-06 | 2026-10-07 18:08:21 | 456 | 5,627 | 3,555.78 | 8.81 |\n| 2 | `BNO874` | 655429607 | 655 | 2026-10-06 13:47:48 | 2026-10-06 | 2026-10-07 13:47:48 | 690 | 8,783 | 19,164.76 | 13.63 |\n| 3 | `BNO874` | 655429605 | 655 | 2026-10-06 13:39:33 | 2026-10-06 | 2026-10-07 13:39:33 | 6 | 12 | 6.75 | 0.04 |\n| 4 | `BNO874` | 655429606 | 655 | 2026-10-06 13:37:48 | 2026-10-06 | 2026-10-07 13:37:48 | 1 | 12 | 2.86 | 0.02 |\n| 5 | `BFX933` | 655429447 | 655 | 2026-10-06 00:07:20 | 2026-10-06 | 2026-10-07 00:07:20 | 376 | 3,996 | 2,694.16 | 8.44 |",
+      "tienda_context": "123",
+      "tools_executed": [
+        {
+          "tool_name": "buscar_tienda_por_nombre",
+          "arguments": {
+            "nombre_parcial": "Angamos"
+          },
+          "result_count": 1,
+          "preview": [
+            {
+              "tienda_id": "123",
+              "Nombre_Tienda": "Angamos",
+              "total_despachos_recientes": 198,
+              "ultimo_despacho_registrado": "2026-10-06",
+              "lead_time_horas": 96
+            }
+          ]
+        },
+        {
+          "tool_name": "resumen_carga_transporte",
+          "arguments": {
+            "fecha": "2026-10-06",
+            "tienda": "123"
+          },
+          "result_count": 5,
+          "preview": [
+            {
+              "tim": 655429676,
+              "Placa": "RBC048",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-06",
+              "hora_carga": "2026-10-06 18:08:21",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-07 18:08:21",
+              "total_pallets": 0,
+              "total_skus_distintos": 261,
+              "total_unidades": 5627,
+              "total_cajas": 456,
+              "peso_total_kg": 3555.78,
+              "volumen_total_m3": 8.81
+            },
+            {
+              "tim": 655429607,
+              "Placa": "BNO874",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-06",
+              "hora_carga": "2026-10-06 13:47:48",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-07 13:47:48",
+              "total_pallets": 0,
+              "total_skus_distintos": 312,
+              "total_unidades": 8783,
+              "total_cajas": 690,
+              "peso_total_kg": 19164.76,
+              "volumen_total_m3": 13.63
+            },
+            {
+              "tim": 655429605,
+              "Placa": "BNO874",
+              "Tienda": "123",
+              "Nombre_Tienda": "Angamos",
+              "Inventario_Whse": "655",
+              "fecha_despacho": "2026-10-06",
+              "hora_carga": "2026-10-06 13:39:33",
+              "lead_time_horas": 24,
+              "fecha_estimada_llegada": "2026-10-07 13:39:33",
+              "total_pallets": 0,
+              "total_skus_distintos": 9,
+              "total_unidades": 12,
+              "total_cajas": 6,
+              "peso_total_kg": 6.75,
+              "volumen_total_m3": 0.04
+            }
+          ]
+        }
+      ],
+      "records_count": 5,
+      "error": null
+    }
+  ]
+}

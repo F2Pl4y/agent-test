@@ -5,93 +5,102 @@ Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del 
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## Arquitectura del Sistema
 
-```mermaid
-flowchart TD
-    subgraph Clientes ["🌐 Clientes y Canales de Acceso"]
-        UI_Local["Frontend Local (:3000 / :8000/app)"]
-        UI_Pages["Frontend GitHub Pages (HTTPS)"]
-        Teams["Microsoft Teams (Próxima fase)"]
-    end
-
-    subgraph Seguridad ["🛡️ Gateway de Seguridad y Autenticación"]
-        AuthCheck{"Verificación Modo Dual\n1. Dominio @tottus.com.pe\n2. Clave Piloto o Token Google"}
-    end
-
-    subgraph BackendGateway ["⚙️ Backend FastAPI (:8000)"]
-        ChatRouter["/api/chat Enrutador"]
-        AgentCore["Agente Logístico (LogisticaAgent)"]
-        SessionAudit["Auditoría y Trazabilidad (SessionManager)"]
-    end
-
-    subgraph IA ["🧠 Motor de Inteligencia Artificial"]
-        GeminiFlash["Google Gemini (3.5 Flash-Lite / Vertex AI)\nFunction Calling Determinista"]
-    end
-
-    subgraph MCP ["🛠️ Servidor Toolbox MCP (:5001)"]
-        ToolboxExec["toolbox.exe (:5001/mcp)"]
-        ToolsConfig["tools.yaml (Consultas SQL Parametrizadas)"]
-    end
-
-    subgraph Data ["☁️ Almacén Central de Datos (GCP)"]
-        BigQuery[("Google BigQuery Sandbox\ntot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS")]
-    end
-
-    Clientes -->|Authorization: Bearer <token>| AuthCheck
-    AuthCheck -- No autorizado (401/403) --> Rechazo["❌ Error 401 / 403 Forbidden"]
-    AuthCheck -- Autorizado --> ChatRouter
-    ChatRouter --> AgentCore
-    AgentCore <-->|Razonamiento y Prompts| GeminiFlash
-    AgentCore -->|Llamada MCP| ToolboxExec
-    ToolboxExec --> ToolsConfig
-    ToolsConfig -->|SQL Seguro en Lectura| BigQuery
-    AgentCore --> SessionAudit
+```text
++-----------------------------------------------------------------------------------+
+|                        CLIENTES Y CANALES DE ACCESO                               |
+|   Frontend Local (:3000 / :8000/app)  |  Frontend GitHub Pages  |  Teams (Fase 2) |
++-----------------------------------------------------------------------------------+
+                                         |
+                       [ Authorization: Bearer <token> ]
+                                         v
++-----------------------------------------------------------------------------------+
+|                    GATEWAY DE SEGURIDAD Y AUTENTICACIÓN                           |
+|   1. Validación de dominio corporativo: @tottus.com.pe                            |
+|   2. Modo Dual: Clave Piloto (.env) O Google OAuth 2.0 (JWT)                      |
+|   3. Whitelist RBAC: Filtro por lista blanca de correos autorizados               |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+|                         BACKEND FASTAPI (:8000)                                   |
+|   - Router: /api/chat, /api/health, /api/tools                                    |
+|   - Orquestador: LogisticaAgent (Ciclo de razonamiento y Function Calling)        |
+|   - Auditoría: SessionManager (Historial y trazabilidad de consultas)             |
++-----------------------------------------------------------------------------------+
+                   |                                       |
+                   v                                       v
++------------------------------------+   +------------------------------------------+
+|     MOTOR DE IA (GOOGLE GEMINI)    |   |         SERVIDOR TOOLBOX MCP (:5001)     |
+|  Gemini 2.5 Flash / Vertex AI      |   |  toolbox.exe con configuración tools.yaml|
+|  Razonamiento y Function Calling   |   +------------------------------------------+
++------------------------------------+                         |
+                                                [ SQL Parametrizado de Lectura ]
+                                                               v
+                                         +------------------------------------------+
+                                         |      GOOGLE BIGQUERY (SANDBOX FALABELLA) |
+                                         |  Tabla: tot_bi_logistica_pe.FT_LOG_SALIDAS|
+                                         +------------------------------------------+
 ```
 
 ---
 
-## 🔐 Seguridad y Control de Acceso (Modo Dual)
+## Seguridad y Control de Acceso (Modo Dual)
 
-El backend implementa un mecanismo de defensa en profundidad para garantizar que **ningún dato corporativo de BigQuery sea expuesto a personas no autorizadas**:
+El backend implementa un mecanismo de defensa en profundidad para garantizar que ningún dato corporativo de BigQuery sea expuesto a personas no autorizadas:
 
 ### 1. Validación Estricta de Dominio Corporativo
-En el cuerpo de cada petición (`ChatRequest`), el campo `user_email` es analizado.
-* **Regla:** Debe terminar obligatoriamente en `@tottus.com.pe`.
-* **Respuesta ante fallo:** `403 Forbidden` (*"Acceso denegado: El asistente logístico está restringido exclusivamente a colaboradores con cuenta corporativa @tottus.com.pe"*).
+En el cuerpo de cada petición (ChatRequest), el campo `user_email` es analizado.
+* Regla: Debe terminar obligatoriamente en `@tottus.com.pe`.
+* Respuesta ante fallo: 403 Forbidden ("Acceso denegado: El asistente logístico está restringido exclusivamente a colaboradores con cuenta corporativa @tottus.com.pe").
 
-### 2. Validación de Credencial en Cabecera HTTP (`Authorization`)
+### 2. Validación de Credencial en Cabecera HTTP (Authorization)
 El endpoint `/api/chat` evalúa la cabecera `Authorization: Bearer <token>` bajo dos modalidades simultáneas:
 
-* **Modo A (Piloto Actual — Activo):**
-  * La credencial enviada se compara contra la variable `PILOT_ACCESS_KEY` configurada en el archivo local `.env` (clave por defecto: `D4t4-PL$2026`).
-  * Utiliza la función criptográfica `secrets.compare_digest()` de Python para prevenir ataques avanzados de temporización (*timing attacks*).
-* **Modo B (Google OAuth 2.0 — Preparado para Producción):**
-  * Si en el futuro el equipo de TI de Falabella otorga un `GOOGLE_CLIENT_ID`, este se agrega al `.env`.
+* Modo A (Piloto Actual — Activo):
+  * La credencial enviada se compara contra la variable PILOT_ACCESS_KEY configurada en el archivo local .env (clave por defecto: D4t4-PL$2026).
+  * Utiliza la función criptográfica `secrets.compare_digest()` de Python para prevenir ataques avanzados de temporización (timing attacks).
+* Modo B (Google OAuth 2.0 — Preparado para Producción):
+  * Si en el futuro el equipo de TI de Falabella otorga un GOOGLE_CLIENT_ID, este se agrega al .env.
   * El backend intentará automáticamente validar la firma criptográfica del token JWT recibido con los servidores de Google (`google.oauth2.id_token.verify_oauth2_token`).
-* **Respuesta ante fallo:** `401 Unauthorized` (*"Credencial no autorizada. Ingresa la clave válida del piloto o inicia sesión con tu cuenta corporativa"*).
+* Respuesta ante fallo: 401 Unauthorized ("Credencial no autorizada. Ingresa la clave válida del piloto o inicia sesión con tu cuenta corporativa").
 
 ### 3. Control por Lista Blanca de Colaboradores (Whitelist RBAC)
-Para garantizar que **nadie pueda inventar usuarios** incluso conociendo la clave secreta o habiéndose autenticado con Google:
-* **Variable en `.env`:** `ALLOWED_USERS=fhurtadoa@tottus.com.pe,companero1@tottus.com.pe`
-* Si la variable contiene correos, el backend **solo permitirá procesar preguntas a esas cuentas específicas**.
-* Si un usuario escribe un correo no autorizado, recibe `403 Forbidden` (*"Acceso denegado: La cuenta no figura en la lista de colaboradores autorizados para este piloto"*).
-* **Flexibilidad total:** Para abrir el acceso a cualquier colaborador de Tottus en el futuro, solo se deja `ALLOWED_USERS=` vacío o con `*` en el `.env`.
+Para garantizar que nadie pueda inventar usuarios incluso conociendo la clave secreta o habiéndose autenticado con Google:
+* Variable en `.env`: `ALLOWED_USERS=fhurtadoa@tottus.com.pe,companero1@tottus.com.pe`
+* Si la variable contiene correos, el backend solo permitirá procesar preguntas a esas cuentas específicas.
+* Si un usuario escribe un correo no autorizado, recibe 403 Forbidden ("Acceso denegado: La cuenta no figura en la lista de colaboradores autorizados para este piloto").
+* Flexibilidad total: Para abrir el acceso a cualquier colaborador de Tottus en el futuro, solo se deja `ALLOWED_USERS=` vacío o con `*` en el `.env`.
 
 ---
 
-## 🛠️ Catálogo de Herramientas Analíticas MCP (`tools.yaml`)
+## 🎯 Catálogo de Herramientas MCP y Alcance Operativo (`tools.yaml`)
 
 El servidor Toolbox MCP (`toolbox.exe`) traduce las intenciones de Gemini en consultas SQL optimizadas sobre la tabla particionada `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`:
 
-| # | Herramienta | Parámetros | Propósito Operativo |
-| :--- | :--- | :--- | :--- |
-| **1** | `resumen_carga_transporte` | `tim`, `placa`, `tienda`, `fecha` | Consolida despachos por camión o transferencia. Devuelve placa, fecha, total cajas, unidades, peso (kg) y volumen (m³). |
-| **2** | `consultar_despachos_logistica` | `tim`, `tienda`, `sku`, `pagina` | Detalle fino a nivel de producto/SKU (código de barra, descripción del artículo, cantidades despachadas). |
-| **3** | `resumen_despachos_por_division` | `tienda`, `dias_atras` | Desglose agregado por división comercial (J01 Abarrotes, J02 Perecibles, Carnes, etc.). |
-| **4** | `alertas_vencimiento_transito` | `tienda`, `dias_margen` | Control preventivo de calidad. Identifica productos perecibles próximos a vencer que se encuentran en tránsito. |
-| **5** | `buscar_por_shipment_o_do` | `shipment`, `trf_do` | Rastreo logístico cuando el usuario no cuenta con el TIM pero tiene el número de Shipment o DO (Delivery Order). |
-| **6** | `buscar_tienda_por_nombre` | `nombre_parcial` | Resuelve nombres comunes (ej. "Angamos", "San Luis", "Huánuco") a sus códigos ID oficiales ('123', '114', '451'). |
+### 🚛 Dominio Transporte, Despachos y Flota Logística (`insights_operativos` — 7 Herramientas Activas)
+
+1. **`resumen_carga_transporte` — Consolidado de Carga por Camión (Placa) o TIM:** Consolida despachos por camión o transferencia. Devuelve placa, fecha de despacho, hora de carga en CD, total de pallets, cajas, unidades, peso total (kg) y volumen (m³).
+   * **Parámetros:** `tim`, `placa`, `tienda`, `fecha`, `fecha_fin`, `pagina`.
+
+2. **`consultar_despachos_logistica` — Detalle Fino de Despachos y SKUs en Tránsito:** Detalle a nivel de producto/SKU (código de barra, descripción del artículo, cantidades despachadas, hora de carga y tienda).
+   * **Parámetros:** `tim`, `tienda`, `sku`, `placa`, `pagina`.
+
+3. **`resumen_despachos_por_division` — Despachos Agregados por División Comercial (J01 a J11):** Desglose agregado por división comercial (J01 Abarrotes, J02 Perecibles, Carnes, etc.) en los últimos N días.
+   * **Parámetros:** `tienda`, `dias_atras`.
+
+4. **`alertas_vencimiento_transito` — Control Preventivo de Calidad y Vencimiento en Tránsito:** Identifica productos perecibles próximos a vencer que se encuentran en despacho o tránsito desde el CD hacia las tiendas.
+   * **Parámetros:** `tienda`, `dias_margen`.
+
+5. **`buscar_por_shipment_o_do` — Rastreo Logístico por Shipment o Delivery Order (Trf_DO):** Rastreo de despachos cuando el usuario no cuenta con el TIM pero tiene el número de Shipment o DO (Delivery Order).
+   * **Parámetros:** `shipment`, `trf_do`.
+
+6. **`buscar_tienda_por_nombre` — Búsqueda y Validación de Tiendas por Nombre o Código:** Resuelve nombres comunes y coloquiales (ej. *"Angamos"*, *"San Luis"*, *"Huánuco"*) a sus códigos ID oficiales ('123', '114', '451').
+   * **Parámetros:** `nombre_parcial`.
+
+7. **`consultar_cargas_pendientes_despacho` — Camiones y TIMs Cargados en Espera de Salida:** Identifica vehículos cargados en el Centro de Distribución (con hora de carga registrada) que aún no cuentan con fecha de envío.
+   * **Parámetros:** `tienda`, `placa`, `dias_atras`.
 
 ---
 
