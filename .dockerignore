@@ -1,0 +1,39 @@
+# ==============================================================================
+# .dockerignore — Exclusiones para compilación limpia en Google Cloud Build / Docker
+# ==============================================================================
+
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+ENV/
+
+# Archivos compilados y temporales de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Control de versiones y herramientas de desarrollo
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+
+# Secretos locales (NUNCA incluir .env en la imagen de Docker)
+.env
+*.local
+
+# Binarios de Windows locales (no aplicables para Linux Cloud Run)
+*.exe
+cloudflared.exe
+toolbox.exe
+
+# Datos y sesiones temporales locales
+data/sessions/
+*.log
+scratch/

@@ -70,36 +70,63 @@ async def add_cache_headers_middleware(request, call_next):
 
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
-# Ruta al repositorio frontend agente-transporte-front
-front_path = Path(__file__).resolve().parent.parent.parent / "agente-transporte-front"
-if front_path.exists():
+# ------------------------------------------------------------------------------
+# Montaje del Frontend (Compatible con Entorno Local y Google Cloud Run)
+# Busca automáticamente en múltiples ubicaciones candidatas para máxima portabilidad
+# ------------------------------------------------------------------------------
+frontend_candidates = [
+    Path(__file__).resolve().parent.parent / "frontend",                                    # /app/frontend (En contenedor Docker)
+    Path(__file__).resolve().parent.parent / "agente-transporte-front",                     # /app/agente-transporte-front (En contenedor)
+    Path(__file__).resolve().parent.parent.parent / "agente-transporte-front",              # ../agente-transporte-front (Entorno de desarrollo local)
+    Path("/app/frontend"),                                                                  # Ruta absoluta en contenedor Cloud Run
+    Path("/app/agente-transporte-front")                                                    # Alternativa absoluta
+]
+
+front_path = None
+for candidate in frontend_candidates:
+    if candidate.exists() and (candidate / "index.html").exists():
+        front_path = candidate
+        break
+
+if front_path:
     app.mount(
         "/app", StaticFiles(directory=str(front_path), html=True), name="frontend"
     )
     logger.info(
-        f"🌐 Frontend montado en: http://localhost:8000/app/ (desde {front_path})"
+        f"🌐 Frontend montado exitosamente en: /app/ (sirviendo desde '{front_path}')"
+    )
+else:
+    logger.warning(
+        "⚠️ No se encontró la carpeta con el frontend estático. La API operará en modo Headless/Gateway exclusivo."
     )
 
-# Registrar las rutas del API
+# Registrar enrutadores oficiales del API (Chat, Health, Tools, Auth)
 app.include_router(chat_router)
-
-from fastapi.responses import Response
 
 
 @app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
+async def favicon() -> Response:
+    """Devuelve favicon vacío para evitar errores 404 en navegadores."""
     return Response(content=b"", media_type="image/x-icon")
 
 
-@app.get("/", tags=["General"])
+@app.get("/", tags=["General"], summary="Redirección raíz o metadatos del servicio")
 async def root():
-    if front_path.exists():
+    """
+    Ruta raíz del servicio:
+    - Si el frontend está montado, redirige automáticamente a /app/
+    - Si no, entrega metadatos descriptivos de la API y enlaces de documentación OpenAPI
+    """
+    if front_path:
         return RedirectResponse(url="/app/")
     return {
-        "message": "Bienvenido al Backend del Agente Logístico Tottus",
+        "service": "Tottus Logistics AI Agent API Gateway",
+        "version": "1.0.0",
+        "architecture": "Google ADK (Agent Development Kit) + GenAI Toolbox MCP",
         "docs_url": "/docs",
         "health_check": "/api/health",
         "chat_endpoint": "/api/chat",
     }
+
