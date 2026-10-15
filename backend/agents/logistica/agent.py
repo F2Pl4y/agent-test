@@ -10,6 +10,7 @@ from backend.models import ToolExecution, ChatResponse
 from backend.agents._shared.loader import mcp_client
 from backend.agents.logistica.prompts import SYSTEM_INSTRUCTION_LOGISTICA, get_system_instruction_logistica
 from backend.services.session_manager import session_manager
+from backend.services.monitoreo_service import monitoreo_service
 
 logger = logging.getLogger("backend.agent_logistica")
 
@@ -243,6 +244,20 @@ class LogisticaAgent:
                     },
                     required=["nombre_parcial"]
                 )
+            ),
+            types.FunctionDeclaration(
+                name="consultar_monitoreo_provincia",
+                description="Consulta el reporte operativo en tiempo real de monitoreo de unidades de transporte EXCLUSIVAMENTE para tiendas de PROVINCIA (norte y sur, códigos que comienzan con '3') y ORIENTE / SELVA (códigos que comienzan con '4', como 474 Pucallpa o 451 Huánuco) desde SharePoint/Excel (Tabla3 - Hoja Perú). NO aplica para tiendas locales de Lima/Callao. Proporciona seguimiento en vivo: si el viaje es con carga ÚNICA o COMPARTIDA, el orden de paradas (Punto 1, 2, 3), la ruta programada de tiendas, la placa del tracto (TRACTO), tipo de unidad (TIPO DE UT: SEMITRAILER, DOBLE NIVEL, FURGÓN), hora de fin de carga en CD (FIN DE CARGA), salida a ruta, ubicación actual (UBICACIÓN), estado operativo en vivo (STATUS) e incidencias (MOTIVO). Permite buscar por TIM, placa o tienda destino.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "tim": types.Schema(type=types.Type.INTEGER, description="Número identificador del TIM logístico."),
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del camión, remolque o tracto."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda destino de provincia u oriente (ej. '318', '352', '451', '474')."),
+                        "tracto": types.Schema(type=types.Type.STRING, description="Placa del tracto o cabina motriz del camión.")
+                    },
+                    required=[]
+                )
             )
         ]
 
@@ -321,6 +336,17 @@ class LogisticaAgent:
             "camiones_cargados_pendientes": "consultar_cargas_pendientes_despacho",
             "cargas_pendientes": "consultar_cargas_pendientes_despacho",
             "camiones_cargados": "consultar_cargas_pendientes_despacho",
+            "consultarmonitoreounidades": "consultar_monitoreo_provincia",
+            "consultar_monitoreo_unidades": "consultar_monitoreo_provincia",
+            "consultarmonitoreoprovincia": "consultar_monitoreo_provincia",
+            "consultar_monitoreo_provincia": "consultar_monitoreo_provincia",
+            "consultar_monitoreo": "consultar_monitoreo_provincia",
+            "monitoreo_unidades": "consultar_monitoreo_provincia",
+            "monitoreo_provincia": "consultar_monitoreo_provincia",
+            "monitoreo_sharepoint": "consultar_monitoreo_provincia",
+            "reporte_monitoreo": "consultar_monitoreo_provincia",
+            "consultar_sharepoint": "consultar_monitoreo_provincia",
+            "monitoreo_ut": "consultar_monitoreo_provincia",
         }
         if clean in aliases:
             return aliases[clean]
@@ -333,7 +359,8 @@ class LogisticaAgent:
             "alertas_vencimiento_transito",
             "buscar_por_shipment_o_do",
             "buscar_tienda_por_nombre",
-            "consultar_cargas_pendientes_despacho"
+            "consultar_cargas_pendientes_despacho",
+            "consultar_monitoreo_provincia"
         ]:
             if stripped == canonical.replace("_", ""):
                 return canonical
@@ -380,12 +407,35 @@ class LogisticaAgent:
 
         # Si la herramienta soporta paginación:
         # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que se traigan todas las páginas completas.
+        fetch_all = True
         if canonical_name in ("consultar_despachos_logistica", "resumen_carga_transporte"):
             if clean_args.get("pagina") == 1:
                 clean_args.pop("pagina", None)
             fetch_all = ("pagina" not in clean_args)
-        else:
-            fetch_all = False
+        # Manejo especializado de la herramienta de Monitoreo de Unidades (SharePoint / Excel - Locales y Provincia)
+        if canonical_name in ("consultar_monitoreo_unidades", "consultar_monitoreo_provincia"):
+            tim_param = clean_args.get("tim")
+            placa_param = clean_args.get("placa")
+            tienda_param = clean_args.get("tienda")
+            tracto_param = clean_args.get("tracto")
+            status_param = clean_args.get("status")
+
+            rows = monitoreo_service.buscar_monitoreo(
+                tim=tim_param,
+                placa=placa_param,
+                tienda=tienda_param,
+                tracto=tracto_param,
+                status=status_param,
+                limit=15
+            )
+
+            execution_record = ToolExecution(
+                tool_name=canonical_name,
+                arguments=clean_args,
+                result_count=len(rows),
+                preview=rows[:3] if (include_data and rows) else None
+            )
+            return rows, execution_record
 
         rows = await mcp_client.call_tool(canonical_name, clean_args, fetch_all_pages=fetch_all)
         rows = self._enrich_rows_with_arrival_estimates(rows)
@@ -514,6 +564,19 @@ class LogisticaAgent:
                 if active_fecha:
                     context_items.append(f"Fecha previamente consultada: '{active_fecha}'")
 
+                # Detección de consulta de seguimiento/ubicación/estado en vivo
+                lowered_prompt = user_prompt.lower()
+                is_tracking_query = any(k in lowered_prompt for k in [
+                    "dónde", "donde", "ubicaci", "se encuentra", "paradero", "en ruta", "estado actual", "status actual", "está el camión", "esta el camion", "está la tim", "esta la tim"
+                ])
+
+                if is_tracking_query:
+                    context_items.append(
+                        "CONSULTA EN VIVO: El usuario solicita la ubicación o estado actual del camión/TIM en tiempo real. "
+                        "DEBES EJECUTAR OBLIGATORIAMENTE la herramienta 'consultar_monitoreo_provincia' en esta ronda para "
+                        "obtener la última posición viva actualizada del sistema; ESTÁ TERMINANTEMENTE PROHIBIDO responder de memoria o repetir la ubicación de turnos previos."
+                    )
+
                 prompt_with_context = f"[Contexto de sesión: {', '.join(context_items)}]\n{user_prompt}" if context_items else user_prompt
 
             # En Google AI Studio la API exige role='user' para respuestas de función; en Vertex AI es 'tool'
@@ -575,7 +638,7 @@ class LogisticaAgent:
                     dict_rows = [r for r in rows if isinstance(r, dict)] if rows else []
                     if dict_rows:
                         canonical = self._resolve_tool_name(fn_name)
-                        if canonical in ("resumen_carga_transporte", "consultar_despachos_logistica", "resumen_despachos_por_division", "buscar_por_shipment_o_do", "alertas_vencimiento_transito", "consultar_cargas_pendientes_despacho"):
+                        if canonical in ("resumen_carga_transporte", "consultar_despachos_logistica", "resumen_despachos_por_division", "buscar_por_shipment_o_do", "alertas_vencimiento_transito", "consultar_cargas_pendientes_despacho", "consultar_monitoreo_unidades", "consultar_monitoreo_provincia"):
                             if any(t.tool_name == "buscar_tienda_por_nombre" for t in tools_executed[:-1]) and len(raw_data) <= 5:
                                 raw_data = list(dict_rows)
                             else:

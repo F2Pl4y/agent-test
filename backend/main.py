@@ -35,6 +35,23 @@ async def lifespan(app: FastAPI):
             "Asegúrate de que 'toolbox.exe' esté corriendo en la Terminal 1 (puerto 5001)."
         )
 
+    # Verificación del reporte de Monitoreo en Vivo (SharePoint / Excel)
+    try:
+        from backend.services.monitoreo_service import monitoreo_service
+        monitoreo_service.buscar_monitoreo(limit=1)
+        p = monitoreo_service._get_excel_path()
+        if p and monitoreo_service._cached_records:
+            logger.info(
+                f"📊 Monitoreo de Transporte (SharePoint) enlazado: '{p.name}' "
+                f"({len(monitoreo_service._cached_records)} unidades activas registradas)"
+            )
+        else:
+            logger.warning(
+                f"⚠️ Archivo de Monitoreo no cargó registros o no se encontró en: {settings.MONITOREO_EXCEL_PATH}"
+            )
+    except Exception as em:
+        logger.warning(f"Aviso al verificar servicio de monitoreo: {em}")
+
     yield
     logger.info("🛑 Deteniendo Backend...")
 

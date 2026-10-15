@@ -284,3 +284,22 @@ async def get_audit_log_endpoint(limit: int = 150, user_email: Optional[str] = N
     _verify_auth_header(authorization)
     return session_manager.get_unified_audit_log(limit=limit, user_email=user_email)
 
+
+@router.get("/monitoreo/status", summary="Verificar estado de carga y datos en vivo del archivo de monitoreo")
+async def monitoreo_status_endpoint():
+    """
+    Permite verificar inmediatamente el archivo de monitoreo en disco, recargando si hubo cambios,
+    y reportando el registro actual para la TIM de prueba.
+    """
+    from backend.services.monitoreo_service import monitoreo_service
+    records = monitoreo_service._load_records()
+    target = next((r for r in records if r.get("_clean_tim") == "676169276"), None)
+    return {
+        "status": "ok",
+        "total_records": len(records),
+        "target_tim_676169276": target,
+        "mtime": monitoreo_service._last_mtime,
+        "size_bytes": monitoreo_service._last_size
+    }
+
+

@@ -95,5 +95,16 @@ class Settings:
         )
         return [u.strip().lower() for u in cleaned.split(",") if u.strip()]
 
+    @property
+    def MONITOREO_EXCEL_PATH(self) -> str:
+        """
+        Ruta local o de almacenamiento en la nube al archivo de Monitoreo de Transporte (SharePoint).
+        En desarrollo: Ruta del archivo sincronizado con OneDrive / SharePoint.
+        En Cloud Run: Ruta montada o destino sincronizado desde GCS / Graph API.
+        """
+        load_dotenv(dotenv_path=env_path, override=True)
+        default_local = r"C:\Users\fhurtadoa\Falabella\DATA ANALITYCS PL - Documentos\Proyectos Test\Transporte\Monitoreo General UT Provincia 2030.xlsx"
+        return os.getenv("MONITOREO_EXCEL_PATH", default_local).strip()
+
 
 settings = Settings()

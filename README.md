@@ -28,20 +28,21 @@ Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del 
 |   - Router: /api/chat, /api/health, /api/tools                                    |
 |   - Orquestador: LogisticaAgent (Ciclo de razonamiento y Function Calling)        |
 |   - Auditoría: SessionManager (Historial y trazabilidad de consultas)             |
+|   - Conectores: Toolbox MCP (BigQuery) + MonitoreoService (SharePoint Excel)      |
 +-----------------------------------------------------------------------------------+
-                   |                                       |
-                   v                                       v
-+------------------------------------+   +------------------------------------------+
-|     MOTOR DE IA (GOOGLE GEMINI)    |   |         SERVIDOR TOOLBOX MCP (:5001)     |
-|  Gemini 2.5 Flash / Vertex AI      |   |  toolbox.exe con configuración tools.yaml|
-|  Razonamiento y Function Calling   |   +------------------------------------------+
-+------------------------------------+                         |
-                                                [ SQL Parametrizado de Lectura ]
-                                                               v
-                                         +------------------------------------------+
-                                         |      GOOGLE BIGQUERY (SANDBOX FALABELLA) |
-                                         |  Tabla: tot_bi_logistica_pe.FT_LOG_SALIDAS|
-                                         +------------------------------------------+
+        |                            |                               |
+        v                            v                               v
++----------------+          +-------------------+          +-------------------+
+|  MOTOR DE IA   |          |    TOOLBOX MCP    |          | MONITOREO SERVICE |
+| Google Gemini  |          |  (:5001 / tools)  |          | (SharePoint/Excel)|
+| 2.5 Flash / VAI|          +---------+---------+          +---------+---------+
++----------------+                    |                              |
+                             [ SQL Parametrizado ]         [ Búsqueda en Memoria ]
+                                      v                              v
+                            +-------------------+          +-------------------+
+                            |  GOOGLE BIGQUERY  |          | SHAREPOINT FALAB. |
+                            |  FT_LOG_SALIDAS   |          | Tabla3 (UT Prov.) |
+                            +-------------------+          +-------------------+
 ```
 
 ---
@@ -101,6 +102,9 @@ El servidor Toolbox MCP (`toolbox.exe`) traduce las intenciones de Gemini en con
 
 7. **`consultar_cargas_pendientes_despacho` — Camiones y TIMs Cargados en Espera de Salida:** Identifica vehículos cargados en el Centro de Distribución (con hora de carga registrada) que aún no cuentan con fecha de envío.
    * **Parámetros:** `tienda`, `placa`, `dias_atras`.
+
+8. **`consultar_monitoreo_unidades` — Monitoreo Operativo en Tiempo Real (SharePoint / Excel — Todas las Tiendas):** Información viva de seguimiento de unidades de transporte a nivel nacional (locales de Lima y provincia desde `Monitoreo General UT Provincia 2030.xlsx`, hoja 'Perú', Tabla3). Cruza datos con BigQuery aportando: placa del tracto, tipo de UT (semitrailer/furgón), puntos de entrega (1 o varios), tipo de carga (única o compartida), fin de carga en CD, salida del CD, salida a ruta, hora de llegada y registro en tienda, ubicación actual, status y motivo de percance reportado para cualquier tienda destino.
+   * **Parámetros:** `tim`, `placa`, `tienda`, `tracto`.
 
 ---
 

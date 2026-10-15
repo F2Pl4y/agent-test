@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-10-14T16:22:03.043705",
+  "file_path": "C:\\Users\\fhurtadoa\\Falabella\\DATA ANALITYCS PL - Documentos\\Proyectos Test\\Transporte\\Monitoreo General UT Provincia 2030.xlsx",
+  "file_exists": true,
+  "file_size_bytes": 27605354,
+  "total_records": 17371,
+  "error": null,
+  "sample_tims": [
+    "655345397",
+    "655345356",
+    "655345305",
+    "655345357",
+    "655345519",
+    "655344739",
+    "655345403",
+    "655345689",
+    "655345960",
+    "655345881"
+  ],
+  "target_tim_676169276": {
+    "origen": "#N/A",
+    "tim": "676169276",
+    "placa": "FRESCOS",
+    "destino": "HB CHICLAYO BELAUNDE",
+    "fin_de_carga": "",
+    "punto": "1",
+    "carga": "COMPARTIDO",
+    "tipo_ut": "SEMITRAILER",
+    "tracto": "AME860",
+    "salida_cd": "46306.659722222219",
+    "salida_ruta": "46306.583333333336",
+    "ubicacion": "CHAO",
+    "status": "Correcto",
+    "motivo": "SIN OBSERVACION",
+    "_clean_tim": "676169276",
+    "_clean_placa": "FRESCOS",
+    "_clean_tracto": "AME860",
+    "_clean_destino": "HBCHICLAYOBELAUNDE"
+  }
+}
