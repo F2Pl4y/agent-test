@@ -426,6 +426,7 @@ class LogisticaAgent:
                 tienda=tienda_param,
                 tracto=tracto_param,
                 status=status_param,
+                force_refresh=True,
                 limit=15
             )
 

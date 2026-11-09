@@ -42,22 +42,36 @@ class MonitoreoService:
         self._last_mtime: float = 0.0
         self._last_size: int = 0
 
-    def _get_excel_path(self) -> Optional[Path]:
-        """Resuelve la ruta del archivo y verifica su existencia."""
-        path = Path(self.excel_path_str)
-        if path.exists() and path.is_file():
-            return path
+    def clear_cache(self):
+        """Purga la memoria caché de monitoreo para forzar recarga inmediata de disco."""
+        self._cached_records = None
+        self._last_mtime = 0.0
+        self._last_size = 0
+        logger.info("🧹 Caché de MonitoreoService purgada exitosamente.")
 
+    def _get_excel_path(self) -> Optional[Path]:
+        """
+        Resuelve la ruta del archivo y verifica su existencia.
+        Si existen varias copias (OneDrive / local data), selecciona automáticamente
+        la que tenga la fecha de modificación más reciente para garantizar datos en vivo.
+        """
         candidates = [
             Path(self.excel_path_str),
             Path.home() / "Falabella" / "DATA ANALITYCS PL - Documentos" / "Proyectos Test" / "Transporte" / "Monitoreo General UT Provincia 2030.xlsx",
             Path(r"C:\Users\fhurtadoa\Falabella\DATA ANALITYCS PL - Documentos\Proyectos Test\Transporte\Monitoreo General UT Provincia 2030.xlsx"),
-            Path(__file__).resolve().parent.parent.parent / "data" / "Monitoreo General UT Provincia 2030.xlsx"
+            Path(__file__).resolve().parent.parent.parent / "data" / "Monitoreo General UT Provincia 2030.xlsx",
+            Path.home() / "OneDrive - Falabella" / "Documentos" / "GitHub" / "agent-test" / "data" / "Monitoreo General UT Provincia 2030.xlsx"
         ]
-        for c in candidates:
-            if c.exists() and c.is_file():
-                return c
-        return None
+        existing = [c for c in candidates if c.exists() and c.is_file()]
+        if not existing:
+            return None
+
+        # Seleccionar la copia con mayor timestamp de modificación (la más fresca)
+        try:
+            latest = max(existing, key=lambda p: p.stat().st_mtime)
+            return latest
+        except Exception:
+            return existing[0]
 
     def _read_bytes_safely(self, file_path: Path) -> Optional[io.BytesIO]:
         """

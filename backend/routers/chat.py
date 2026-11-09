@@ -218,9 +218,11 @@ async def health_endpoint() -> HealthResponse:
 
 @router.post("/cache/clear", summary="Limpiar la memoria caché de consultas")
 async def clear_cache_endpoint():
-    """Purga la memoria caché de consultas para forzar a BigQuery a recalcular datos frescos."""
+    """Purga la memoria caché de consultas y monitoreo para forzar datos frescos."""
     mcp_client.clear_cache()
-    return {"status": "ok", "message": "Caché de consultas purgada exitosamente."}
+    from backend.services.monitoreo_service import monitoreo_service
+    monitoreo_service.clear_cache()
+    return {"status": "ok", "message": "Caché de consultas y monitoreo purgada exitosamente."}
 
 def _verify_auth_header(authorization: Optional[str]):
     """Valida la credencial del piloto o token de Google para endpoints sensibles."""
@@ -292,7 +294,7 @@ async def monitoreo_status_endpoint():
     y reportando el registro actual para la TIM de prueba.
     """
     from backend.services.monitoreo_service import monitoreo_service
-    records = monitoreo_service._load_records()
+    records = monitoreo_service._load_records(force_refresh=True)
     target = next((r for r in records if r.get("_clean_tim") == "676169276"), None)
     return {
         "status": "ok",
