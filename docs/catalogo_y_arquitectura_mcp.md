@@ -181,8 +181,16 @@ El toolset activo **`insights_operativos`** registra **7 herramientas operativas
 
 ---
 
-### 🔒 Herramienta 8 (En Cuarentena / No Expuesta): `consultar_estado_pedido_oc`
+### 🔒 Herramienta 8 (En Cuarentena / No Expuesta en MCP): `consultar_estado_pedido_oc`
 * Definida en [`toolbox/tools.yaml`](../toolbox/tools.yaml#L437-L465) como plantilla futura para órdenes de compra (`@tim`, `@oc`), pero **comentada y excluida** del toolset `insights_operativos` ([línea 479](../toolbox/tools.yaml#L479)) para garantizar que el agente no la invoque en producción.
+
+---
+
+### 📍 Herramienta Híbrida Complementaria (En Proceso Python): `consultar_monitoreo_provincia`
+Además de las 7 herramientas SQL servidas por `toolbox.exe` sobre BigQuery, [`LogisticaAgent`](../backend/agents/logistica/agent.py#L248-L261) expone una 8ª herramienta de *Function Calling* ejecutada localmente por [`MonitoreoService`](../backend/services/monitoreo_service.py):
+* **Fuente de datos:** Archivo Excel sincronizado de SharePoint (`Monitoreo General UT Provincia 2030.xlsx`, hoja `Perú`, `Tabla3`).
+* **Alcance:** Tiendas de Provincia (`3xx`) y Oriente (`4xx`).
+* **Capacidades:** Lectura sin bloqueo (`Win32 FILE_SHARE_READ | FILE_SHARE_WRITE`), parser dual (`OpenPyXL` + `XML` nativo), caché en memoria invalidada por `mtime`, detección de carga **ÚNICA vs COMPARTIDA** (ventana de $\pm 2\text{ horas}$ en `FIN DE CARGA`) y reconstrucción del itinerario de paradas (`Punto 1, 2, 3`).
 
 ---
 

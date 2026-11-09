@@ -1,7 +1,7 @@
 # 🚛 Tottus Logistics AI Agent — Backend API Gateway 🇵🇪
-### Motor de Inteligencia Operativa, Orquestación con Gemini y Acceso Seguro a BigQuery
+### Motor de Inteligencia Operativa, Orquestación con Gemini y Acceso Seguro a BigQuery + SharePoint
 
-Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del Asistente de Transporte y Despachos de **Tottus Perú (Falabella)**. Proporciona una arquitectura de API Gateway con **FastAPI**, orquestación de modelos de lenguaje con **Google Gemini** (`google-genai` / Vertex AI), integración de herramientas de datos mediante **Toolbox MCP** sobre **Google BigQuery**, y un sistema de control de acceso corporativo y auditoría en **Modo Dual**.
+Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del Asistente de Transporte y Despachos de **Tottus Perú (Falabella)**. Proporciona una arquitectura de API Gateway con **FastAPI**, orquestación de modelos de lenguaje con **Google Gemini** (`google-genai` / Vertex AI), integración de herramientas de datos mediante **Toolbox MCP** sobre **Google BigQuery**, seguimiento en tiempo real de unidades de provincia mediante **MonitoreoService (SharePoint / Excel)**, y un sistema de control de acceso corporativo y auditoría en **Modo Dual**.
 
 > 🔗 **Repositorio Frontend asociado:** `agente-transporte-front` (Interfaz web estática que consume este API Gateway o se monta automáticamente en la ruta `/app/`).
 
@@ -29,8 +29,7 @@ Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del 
 |                         BACKEND FASTAPI (:8000)                                   |
 |   - Router: /api/auth/verify, /api/chat, /api/audit, /api/sessions, /api/health   |
 |   - Orquestador: LogisticaAgent (Ciclo de razonamiento y Function Calling)        |
-<<<<<<< HEAD:README01.md
-|   - Auditoría: SessionManager (Historial y trazabilidad de consultas)             |
+|   - Auditoría: SessionManager (Historial JSON por sesión y audit_log.jsonl)       |
 |   - Conectores: Toolbox MCP (BigQuery) + MonitoreoService (SharePoint Excel)      |
 +-----------------------------------------------------------------------------------+
         |                            |                               |
@@ -38,7 +37,7 @@ Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del 
 +----------------+          +-------------------+          +-------------------+
 |  MOTOR DE IA   |          |    TOOLBOX MCP    |          | MONITOREO SERVICE |
 | Google Gemini  |          |  (:5001 / tools)  |          | (SharePoint/Excel)|
-| 2.5 Flash / VAI|          +---------+---------+          +---------+---------+
+| 3.5 Flash-Lite |          +---------+---------+          +---------+---------+
 +----------------+                    |                              |
                              [ SQL Parametrizado ]         [ Búsqueda en Memoria ]
                                       v                              v
@@ -46,23 +45,6 @@ Este repositorio contiene el **Backend y Motor de Inteligencia Artificial** del 
                             |  GOOGLE BIGQUERY  |          | SHAREPOINT FALAB. |
                             |  FT_LOG_SALIDAS   |          | Tabla3 (UT Prov.) |
                             +-------------------+          +-------------------+
-=======
-|   - Auditoría: SessionManager (Historial JSON por sesión y audit_log.jsonl)       |
-+-----------------------------------------------------------------------------------+
-                   |                                       |
-                   v                                       v
-+------------------------------------+   +------------------------------------------+
-|     MOTOR DE IA (GOOGLE GEMINI)    |   |         SERVIDOR TOOLBOX MCP (:5001)     |
-|  Gemini 3.5 Flash-Lite / Vertex AI |   |  toolbox.exe con configuración tools.yaml|
-|  Razonamiento y Function Calling   |   +------------------------------------------+
-+------------------------------------+                         |
-                                                [ SQL Parametrizado de Lectura ]
-                                                               v
-                                         +------------------------------------------+
-                                         |      GOOGLE BIGQUERY (SANDBOX FALABELLA) |
-                                         |  Tabla: tot_bi_logistica_pe.FT_LOG_SALIDAS|
-                                         +------------------------------------------+
->>>>>>> 19378b5e7476290b7b0b69f6933958932ea319ab:README.md
 ```
 
 ---
@@ -94,41 +76,41 @@ Configurado mediante la variable `ALLOWED_USERS` en [`backend/config.py`](backen
 
 ---
 
-## 🎯 Catálogo de Herramientas MCP y Alcance Operativo (`tools.yaml`)
+## 🎯 Catálogo de Herramientas MCP y Alcance Operativo (`tools.yaml` + `MonitoreoService`)
 
-> 📄 **Documentación técnica completa del MCP:** Consulta [**`docs/catalogo_y_arquitectura_mcp.md`**](docs/catalogo_y_arquitectura_mcp.md) para ver el detalle de gobernanza SQL, parámetros tipados, reglas de *Lead Time*, caché TTL, paginación automática y pruebas JSON-RPC 2.0.
+> 📄 **Documentación adicional:**
+> * [**`docs/catalogo_y_arquitectura_mcp.md`**](docs/catalogo_y_arquitectura_mcp.md): Detalle técnico de gobernanza SQL, parámetros tipados, reglas de *Lead Time*, caché TTL, paginación automática y pruebas JSON-RPC 2.0.
+> * [**`Preguntas.md`**](Preguntas.md): Guía funcional de fuentes de datos (Reales vs Simuladas), restricciones y catálogo de preguntas operativas.
 
-El servidor Toolbox MCP traduce las invocaciones de Gemini en consultas SQL parametrizadas de solo lectura sobre la tabla particionada `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`:
+El agente combina **7 herramientas SQL gobernadas** en BigQuery (`tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`) servidas por Toolbox MCP y **1 herramienta de monitoreo en vivo** sobre SharePoint/Excel:
 
-### 🚛 Dominio Transporte, Despachos y Flota Logística (`insights_operativos` — 7 Herramientas Activas)
+### 🚛 Dominio Transporte, Despachos y Flota Logística (8 Herramientas Activas)
 
-1. **`resumen_carga_transporte` — Consolidado de Carga por Camión (Placa) o TIM:** Consolida despachos por camión o transferencia. Devuelve placa, fecha de despacho, hora de carga en CD, *lead time* estimado, fecha estimada de llegada, total de pallets, cajas, unidades, peso total (kg) y volumen ($m^3$).
+1. **`resumen_carga_transporte` — Consolidado de Carga por Camión (Placa) o TIM (BigQuery MCP):** Consolida despachos por camión o transferencia. Devuelve placa, fecha de despacho, hora de carga en CD, *lead time* estimado, fecha estimada de llegada, total de pallets, cajas, unidades, peso total (kg) y volumen ($m^3$).
    * **Parámetros:** `tim`, `placa`, `tienda`, `fecha`, `fecha_fin`, `pagina`.
 
-2. **`consultar_despachos_logistica` — Detalle Fino de Despachos y SKUs en Tránsito:** Detalle a nivel de producto/SKU (código SKU, descripción del artículo, orden de entrega `Trf_DO`, embarque `Shipment`, hora de carga y tienda destino).
+2. **`consultar_despachos_logistica` — Detalle Fino de Despachos y SKUs en Tránsito (BigQuery MCP):** Detalle a nivel de producto/SKU (código SKU, descripción del artículo, orden de entrega `Trf_DO`, embarque `Shipment`, hora de carga y tienda destino).
    * **Parámetros:** `tim`, `tienda`, `sku`, `placa`, `pagina`.
 
-3. **`resumen_despachos_por_division` — Despachos Agregados por División Comercial (J01 a J11):** Desglose agregado de unidades, cajas, peso y TIMs por división comercial en los últimos $N$ días.
+3. **`resumen_despachos_por_division` — Despachos Agregados por División Comercial J01 a J11 (BigQuery MCP):** Desglose agregado de unidades, cajas, peso y TIMs por división comercial en los últimos $N$ días.
    * **Parámetros:** `tienda`, `dias_atras`.
 
-4. **`alertas_vencimiento_transito` — Control Preventivo de Calidad y Vencimiento en Tránsito:** Identifica productos perecibles próximos a vencer que se encuentran en despacho o tránsito desde el CD hacia las tiendas.
+4. **`alertas_vencimiento_transito` — Control Preventivo de Calidad y Vencimiento en Tránsito (BigQuery MCP):** Identifica productos perecibles próximos a vencer que se encuentran en despacho o tránsito desde el CD hacia las tiendas.
    * **Parámetros:** `tienda`, `dias_margen`.
 
-5. **`buscar_por_shipment_o_do` — Rastreo Logístico por Shipment o Delivery Order (`Trf_DO`):** Rastreo de despachos cuando el usuario no cuenta con el TIM pero tiene el número de Shipment o DO (Delivery Order).
+5. **`buscar_por_shipment_o_do` — Rastreo Logístico por Shipment o Delivery Order `Trf_DO` (BigQuery MCP):** Rastreo de despachos cuando el usuario no cuenta con el TIM pero tiene el número de Shipment o DO (Delivery Order).
    * **Parámetros:** `shipment`, `trf_do`.
 
-6. **`buscar_tienda_por_nombre` — Búsqueda y Validación de Tiendas por Nombre o Código:** Resuelve nombres comerciales (ej. *"Angamos"*, *"San Luis"*, *"Huánuco"*) o códigos a sus IDs oficiales en BigQuery (`123`, `114`, `451`).
+6. **`buscar_tienda_por_nombre` — Búsqueda y Validación de Tiendas por Nombre o Código (BigQuery MCP):** Resuelve nombres comerciales (ej. *"Angamos"*, *"San Luis"*, *"Huánuco"*) o códigos a sus IDs oficiales en BigQuery (`123`, `114`, `451`).
    * **Parámetros:** `nombre_parcial`.
 
-7. **`consultar_cargas_pendientes_despacho` — Camiones y TIMs Cargados en Espera de Salida:** Identifica vehículos cargados en el Centro de Distribución (con `Hora_de_Carga` registrada) pendientes de despacho en los últimos $N$ días.
+7. **`consultar_cargas_pendientes_despacho` — Camiones y TIMs Cargados en Espera de Salida (BigQuery MCP):** Identifica vehículos cargados en el Centro de Distribución (con `Hora_de_Carga` registrada) pendientes de despacho en los últimos $N$ días.
    * **Parámetros:** `tienda`, `placa`, `dias_atras`.
 
-<<<<<<< HEAD:README01.md
-8. **`consultar_monitoreo_unidades` — Monitoreo Operativo en Tiempo Real (SharePoint / Excel — Todas las Tiendas):** Información viva de seguimiento de unidades de transporte a nivel nacional (locales de Lima y provincia desde `Monitoreo General UT Provincia 2030.xlsx`, hoja 'Perú', Tabla3). Cruza datos con BigQuery aportando: placa del tracto, tipo de UT (semitrailer/furgón), puntos de entrega (1 o varios), tipo de carga (única o compartida), fin de carga en CD, salida del CD, salida a ruta, hora de llegada y registro en tienda, ubicación actual, status y motivo de percance reportado para cualquier tienda destino.
+8. **`consultar_monitoreo_provincia` (`consultar_monitoreo_unidades`) — Monitoreo Operativo en Tiempo Real (SharePoint / Excel — Provincia y Oriente):** Información viva de seguimiento de unidades de transporte para tiendas de Provincia (`3xx`) y Oriente (`4xx`) desde `Monitoreo General UT Provincia 2030.xlsx` (hoja `Perú`, `Tabla3`). Aporta ubicación actual en carretera (`UBICACIÓN`), placa del `TRACTO`, tipo de unidad (`TIPO DE UT`), análisis de viaje con carga **ÚNICA** o **COMPARTIDA** (ventana de $\pm 2\text{ h}$ en `FIN DE CARGA`), secuencia de paradas (`Punto 1, 2, 3`), hora de salida a ruta, llegada a destino, estado (`STATUS`) y percances (`MOTIVO`).
    * **Parámetros:** `tim`, `placa`, `tienda`, `tracto`.
-=======
-*(Nota: Existe una octava definición `consultar_estado_pedido_oc` en `tools.yaml` mantenida en cuarentena/plantilla y desactivada del toolset expuesto al agente).*
->>>>>>> 19378b5e7476290b7b0b69f6933958932ea319ab:README.md
+
+*(Nota: Existe adicionalmente una definición `consultar_estado_pedido_oc` en `tools.yaml` mantenida en cuarentena/plantilla y desactivada del toolset expuesto al agente).*
 
 ---
 
@@ -190,13 +172,16 @@ Monitoreo de estado de salud del sistema (con caché de 60s).
 Devuelve las definiciones y esquemas de todas las herramientas MCP disponibles en el servidor Toolbox.
 
 ### 5. `POST /api/cache/clear`
-Purga la memoria caché LRU+TTL en memoria (`SimpleTTLCache`) de consultas MCP para forzar lecturas frescas desde BigQuery.
+Purga tanto la memoria caché LRU+TTL (`SimpleTTLCache`) de consultas MCP como la caché en memoria de `MonitoreoService` para forzar lecturas frescas desde BigQuery y SharePoint/Excel.
 
 ### 6. `GET /api/sessions`, `GET /api/sessions/{session_id}` y `DELETE /api/sessions/{session_id}`
 Gestión y trazabilidad de sesiones individuales resguardadas en disco (`data/sessions/`). Requiere cabecera `Authorization: Bearer <token>`.
 
 ### 7. `GET /api/audit`
 Devuelve la bitácora cronológica unificada (`data/audit_log.jsonl`) de todas las consultas realizadas por los colaboradores para fines de gobernanza y auditoría. Requiere cabecera `Authorization: Bearer <token>`.
+
+### 8. `GET /api/monitoreo/status`
+Verifica en tiempo real el archivo Excel de monitoreo sincronizado desde SharePoint (`Monitoreo General UT Provincia 2030.xlsx`), recargando si hubo cambios y reportando el total de registros activos, `mtime` y tamaño en bytes.
 
 ---
 
@@ -217,15 +202,17 @@ agent-test/
 │   │       ├── agent.py         # Orquestador de Gemini, Function Calling, reintentos y síntesis
 │   │       └── prompts.py       # Directivas del sistema, reglas de negocio y glosario logístico
 │   └── services/
+│       ├── monitoreo_service.py # Lector resiliente de Excel/SharePoint (Tabla3) e itinerario de paradas
 │       └── session_manager.py   # Resguardo atómico de sesiones JSON y bitácora audit_log.jsonl
 ├── toolbox/
 │   └── tools.yaml               # Definición declarativa de las consultas SQL en BigQuery MCP
 ├── docs/
 │   ├── catalogo_y_arquitectura_mcp.md # Documentación técnica detallada del servidor y herramientas MCP
 │   └── cloud_run_guia_despliegue.md   # Guía paso a paso para despliegue en Google Cloud Run
-├── data/                        # Almacenamiento local de sesiones y bitácora de auditoría
+├── data/                        # Almacenamiento local de sesiones, estado de monitoreo y bitácora
+├── Preguntas.md                 # Guía funcional de preguntas, fuentes de datos y reglas operativas
 ├── Dockerfile                   # Definición de contenedor Python 3.11-slim para Cloud Run
-├── requirements.txt             # Dependencias de Python (FastAPI, Uvicorn, google-genai, etc.)
+├── requirements.txt             # Dependencias de Python (FastAPI, Uvicorn, google-genai, openpyxl, etc.)
 ├── .env.example                 # Plantilla de variables de entorno (sin secretos)
 ├── .env                         # Variables de entorno locales (Ignorado en Git)
 ├── toolbox.exe                  # Binario local del servidor MCP Toolbox (Ignorado en Git)
