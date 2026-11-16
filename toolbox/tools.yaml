@@ -17,86 +17,107 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Consulta el detalle de despachos y transferencias en tránsito desde el CD 
-      hacia las tiendas en los últimos 31 días. Devuelve SKU, descripción, unidades, 
-      cajas, peso, placa de transporte y fecha de envío. Permite buscar por TIM, 
-      tienda, SKU o placa.
+      Consulta el detalle de despachos y transferencias en tránsito desde el CD
+      hacia las tiendas en los últimos 31 días (Perú o Chile). Devuelve SKU, descripción,
+      unidades, cajas, peso, placa de transporte y fecha de envío. Permite buscar por TIM,
+      tienda (o '*' para toda la cadena), SKU o placa.
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: tim
         type: integer
-        description: "Número identificador del TIM logístico (ej. 655425244). Enviar null o 0 si no se tiene."
+        description: "Número identificador del TIM logístico (ej. 655425244). Enviar 0 si no se tiene."
         required: false
       - name: tienda
         type: string
-        description: "ID de la tienda destino como texto (ej. '123', '114', '104'). Opcional si se especifica TIM o placa."
+        description: "ID de la tienda destino (ej. '123', '114', '104'), o '*' / 'TODAS' / '' para toda la cadena."
         required: false
       - name: sku
         type: string
-        description: "Código SKU del producto. Opcional para rastrear un artículo puntual."
+        description: "Código SKU del producto. Enviar '' si no se filtra por artículo."
         required: false
       - name: placa
         type: string
-        description: "Placa del camión de transporte. Opcional para filtrar por vehículo."
-        required: false
-      - name: pagina
-        type: integer
-        description: "Número de página específica (50 filas por página). Dejar vacío o null para obtener todos los registros sin paginar."
+        description: "Placa del camión de transporte. Enviar '' si no se filtra por vehículo."
         required: false
     statement: |
-      WITH datos AS (
-        SELECT 
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        SELECT
+            'PE' AS pais,
             tim,
-            Shipment, 
+            Shipment,
             Placa,
-            sku, 
+            sku,
             Descripcion,
             Trf_DO,
             Tipo_DO,
-            Inventario_Whse, 
+            Inventario_Whse,
             Tienda,
-            Nombre_Tienda, 
+            Nombre_Tienda,
             Fecha_Enviado,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', Hora_de_Carga) AS hora_carga,
-            CASE 
+            CASE
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
               ELSE 96
             END AS lead_time_horas,
-            CASE 
+            CASE
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 1 DAY)
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 2 DAY)
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 3 DAY)
               ELSE DATE_ADD(DATE(Fecha_Enviado), INTERVAL 4 DAY)
-            END AS fecha_estimada_llegada,
-            ROW_NUMBER() OVER(ORDER BY Fecha_Enviado DESC, sku) AS num_fila
-        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
+            END AS fecha_estimada_llegada
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
         WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
           AND Fecha_Enviado <= CURRENT_DATE("America/Lima")
-          AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
-          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
-          AND (@sku IS NULL OR @sku = '' OR sku = @sku)
-          AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
-      )
-      SELECT 
-          tim,
-          Shipment, 
-          Placa,
-          sku, 
-          Descripcion,
-          Trf_DO,
-          Tipo_DO,
-          Inventario_Whse, 
-          Tienda,
-          Nombre_Tienda, 
-          Fecha_Enviado,
-          hora_carga,
-          lead_time_horas,
-          fecha_estimada_llegada
-      FROM datos
-      WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
-      ORDER BY num_fila
-      LIMIT 5000;
+          AND (@tim = 0 OR Tim = @tim)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+          AND (TRIM(@sku) = '' OR CAST(sku AS STRING) = TRIM(@sku))
+          AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+        ORDER BY Fecha_Enviado DESC, sku
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        SELECT
+            'CL' AS pais,
+            tim,
+            Shipment,
+            Placa,
+            sku,
+            Descripcion,
+            Trf_DO,
+            Tipo_DO,
+            Inventario_Whse,
+            Tienda,
+            Nombre_Tienda,
+            Fecha_Enviado,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', Hora_de_Carga) AS hora_carga,
+            CASE
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
+              ELSE 96
+            END AS lead_time_horas,
+            CASE
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 1 DAY)
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 2 DAY)
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN DATE_ADD(DATE(Fecha_Enviado), INTERVAL 3 DAY)
+              ELSE DATE_ADD(DATE(Fecha_Enviado), INTERVAL 4 DAY)
+            END AS fecha_estimada_llegada
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL 31 DAY)
+          AND Fecha_Enviado <= CURRENT_DATE("America/Santiago")
+          AND (@tim = 0 OR Tim = @tim)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+          AND (TRIM(@sku) = '' OR CAST(sku AS STRING) = TRIM(@sku))
+          AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+        ORDER BY Fecha_Enviado DESC, sku
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 2: Consolidado de carga por Camión (Placa) o TIM
@@ -105,74 +126,83 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Calcula el consolidado de carga por camión (placa) o TIM de despacho hacia una tienda.
-      Devuelve fecha de despacho, hora de carga en CD (hora_carga), bultos, cajas, unidades, peso y volumen.
+      Calcula el consolidado de carga por camión (placa) o TIM de despacho hacia una tienda
+      (o toda la cadena con '*') en Perú o Chile. Devuelve fecha de despacho, hora de carga en CD
+      (hora_carga), bultos, cajas, unidades, peso y volumen.
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: tim
         type: integer
-        description: "Número TIM de la transferencia. Opcional si se busca por placa o tienda."
+        description: "Número TIM de la transferencia. Enviar 0 si se busca por placa o tienda."
         required: false
       - name: placa
         type: string
-        description: "Placa del camión de transporte. Opcional si se busca por TIM."
+        description: "Placa del camión de transporte. Enviar '' si se busca por TIM o tienda."
         required: false
       - name: tienda
         type: string
-        description: "Código ID de la tienda destino (ej. '123' para Angamos, '451' para Huanuco). Opcional."
+        description: "Código ID de la tienda destino (ej. '123', '451'), o '*' / 'TODAS' / '' para toda la cadena."
         required: false
       - name: fecha
         type: string
-        description: "Fecha específica de despacho o fecha de inicio en formato YYYY-MM-DD (ej. '2026-09-26'). Opcional."
+        description: "Fecha específica de despacho o inicio en formato YYYY-MM-DD (ej. '2026-09-26'). Enviar '' si no aplica."
         required: false
       - name: fecha_fin
         type: string
-        description: "Fecha final en formato YYYY-MM-DD cuando se consulta un rango de fechas (ej. '2026-09-30'). Opcional."
-        required: false
-      - name: pagina
-        type: integer
-        description: "Número de página a consultar (1 para filas 1-50, 2 para filas 51-100, etc.). Opcional."
+        description: "Fecha final en formato YYYY-MM-DD para rango de fechas. Enviar '' si no aplica."
         required: false
     statement: |
-      WITH datos AS (
-        SELECT 
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        WITH datos AS (
+          SELECT
+              'PE' AS pais,
+              tim,
+              Placa,
+              Tienda,
+              Nombre_Tienda,
+              Inventario_Whse,
+              DATE(Fecha_Enviado) AS fecha_despacho,
+              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+              COUNT(DISTINCT Pallet) AS total_pallets,
+              COUNT(DISTINCT sku) AS total_skus_distintos,
+              ROUND(SUM(Unidades), 0) AS total_unidades,
+              ROUND(SUM(Cajas), 0) AS total_cajas,
+              ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+              ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+          FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+          WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+            AND (@tim = 0 OR Tim = @tim)
+            AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+            AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+            AND (
+              TRIM(@fecha) = ''
+              OR (TRIM(@fecha_fin) != '' AND DATE(Fecha_Enviado) >= SAFE_CAST(TRIM(@fecha) AS DATE) AND DATE(Fecha_Enviado) <= SAFE_CAST(TRIM(@fecha_fin) AS DATE))
+              OR (TRIM(@fecha_fin) = '' AND (
+                   CAST(DATE(Fecha_Enviado) AS STRING) = TRIM(@fecha)
+                   OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', TRIM(@fecha), '%')
+              ))
+            )
+          GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+        )
+        SELECT
+            pais,
             tim,
             Placa,
             Tienda,
             Nombre_Tienda,
             Inventario_Whse,
-            DATE(Fecha_Enviado) AS fecha_despacho,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
-            COUNT(DISTINCT Pallet) AS total_pallets,
-            COUNT(DISTINCT sku) AS total_skus_distintos,
-            ROUND(SUM(Unidades), 0) AS total_unidades,
-            ROUND(SUM(Cajas), 0) AS total_cajas,
-            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
-            ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
-        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
-          AND (@tim IS NULL OR @tim = 0 OR Tim = @tim)
-          AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
-          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
-          AND (
-            (@fecha IS NULL OR @fecha = '')
-            OR (@fecha_fin IS NOT NULL AND @fecha_fin != '' AND DATE(Fecha_Enviado) >= DATE(@fecha) AND DATE(Fecha_Enviado) <= DATE(@fecha_fin))
-            OR ((@fecha_fin IS NULL OR @fecha_fin = '') AND (
-                 CAST(DATE(Fecha_Enviado) AS STRING) = @fecha
-                 OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', @fecha, '%')
-            ))
-          )
-        GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
-      ),
-      numerados AS (
-        SELECT 
-            *,
-            CASE 
+            fecha_despacho,
+            hora_carga,
+            CASE
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
               ELSE 96
             END AS lead_time_horas,
-            CASE 
+            CASE
               WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '1') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 24 HOUR))
               WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '3') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 48 HOUR))
               WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '4') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 72 HOUR))
@@ -182,28 +212,84 @@ tools:
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN CAST(DATE_ADD(fecha_despacho, INTERVAL 3 DAY) AS STRING)
               ELSE CAST(DATE_ADD(fecha_despacho, INTERVAL 4 DAY) AS STRING)
             END AS fecha_estimada_llegada,
-            ROW_NUMBER() OVER(ORDER BY fecha_despacho DESC, hora_carga DESC, total_cajas DESC) AS num_fila
+            total_pallets,
+            total_skus_distintos,
+            total_unidades,
+            total_cajas,
+            peso_total_kg,
+            volumen_total_m3
         FROM datos
-      )
-      SELECT 
-          tim,
-          Placa,
-          Tienda,
-          Nombre_Tienda,
-          Inventario_Whse,
-          fecha_despacho,
-          hora_carga,
-          lead_time_horas,
-          fecha_estimada_llegada,
-          total_pallets,
-          total_skus_distintos,
-          total_unidades,
-          total_cajas,
-          peso_total_kg,
-          volumen_total_m3
-      FROM numerados
-      WHERE (@pagina IS NULL OR @pagina = 0 OR num_fila BETWEEN (@pagina - 1) * 50 + 1 AND @pagina * 50)
-      ORDER BY num_fila;
+        ORDER BY fecha_despacho DESC, hora_carga DESC, total_cajas DESC
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        WITH datos AS (
+          SELECT
+              'CL' AS pais,
+              tim,
+              Placa,
+              Tienda,
+              Nombre_Tienda,
+              Inventario_Whse,
+              DATE(Fecha_Enviado) AS fecha_despacho,
+              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+              COUNT(DISTINCT Pallet) AS total_pallets,
+              COUNT(DISTINCT sku) AS total_skus_distintos,
+              ROUND(SUM(Unidades), 0) AS total_unidades,
+              ROUND(SUM(Cajas), 0) AS total_cajas,
+              ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+              ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+          FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+          WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL 31 DAY)
+            AND (@tim = 0 OR Tim = @tim)
+            AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+            AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+            AND (
+              TRIM(@fecha) = ''
+              OR (TRIM(@fecha_fin) != '' AND DATE(Fecha_Enviado) >= SAFE_CAST(TRIM(@fecha) AS DATE) AND DATE(Fecha_Enviado) <= SAFE_CAST(TRIM(@fecha_fin) AS DATE))
+              OR (TRIM(@fecha_fin) = '' AND (
+                   CAST(DATE(Fecha_Enviado) AS STRING) = TRIM(@fecha)
+                   OR CAST(DATE(Fecha_Enviado) AS STRING) LIKE CONCAT('%', TRIM(@fecha), '%')
+              ))
+            )
+          GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+        )
+        SELECT
+            pais,
+            tim,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            fecha_despacho,
+            hora_carga,
+            CASE
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
+              ELSE 96
+            END AS lead_time_horas,
+            CASE
+              WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '1') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 24 HOUR))
+              WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '3') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 48 HOUR))
+              WHEN hora_carga IS NOT NULL AND STARTS_WITH(CAST(Tienda AS STRING), '4') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 72 HOUR))
+              WHEN hora_carga IS NOT NULL THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 96 HOUR))
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN CAST(DATE_ADD(fecha_despacho, INTERVAL 1 DAY) AS STRING)
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN CAST(DATE_ADD(fecha_despacho, INTERVAL 2 DAY) AS STRING)
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN CAST(DATE_ADD(fecha_despacho, INTERVAL 3 DAY) AS STRING)
+              ELSE CAST(DATE_ADD(fecha_despacho, INTERVAL 4 DAY) AS STRING)
+            END AS fecha_estimada_llegada,
+            total_pallets,
+            total_skus_distintos,
+            total_unidades,
+            total_cajas,
+            peso_total_kg,
+            volumen_total_m3
+        FROM datos
+        ORDER BY fecha_despacho DESC, hora_carga DESC, total_cajas DESC
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 3: Despachos agregados por División Comercial (J01 a J11)
@@ -212,30 +298,55 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Permite saber cuántas unidades y cajas se han despachado a una tienda 
-      desglosado por división comercial (ej. Carnes, Abarrotes, etc.) en los últimos N días.
+      Permite saber cuántas unidades y cajas se han despachado a una tienda (o a toda la cadena con '*')
+      desglosado por división comercial (ej. Carnes, Abarrotes, etc.) en los últimos N días (PE o CL).
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: tienda
         type: string
-        description: "ID de la tienda destino (ej. '123', '114')."
-        required: true
+        description: "ID de la tienda destino (ej. '123', '114'), o '*' / 'TODAS' / '' para consolidado global."
+        required: false
       - name: dias_atras
         type: integer
         description: "Rango de días hacia atrás a consultar (por defecto 7 días)."
         required: false
     statement: |
-      SELECT 
-          Division,
-          COUNT(DISTINCT sku) AS total_skus,
-          ROUND(SUM(Unidades), 0) AS total_unidades,
-          ROUND(SUM(Cajas), 0) AS total_cajas,
-          ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
-          COUNT(DISTINCT tim) AS total_envios_tim
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(@dias_atras, 7) DAY)
-        AND Tienda = @tienda
-      GROUP BY Division
-      ORDER BY total_unidades DESC;
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        SELECT
+            'PE' AS pais,
+            Division,
+            COUNT(DISTINCT sku) AS total_skus,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+            COUNT(DISTINCT tim) AS total_envios_tim
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(NULLIF(@dias_atras, 0), 7) DAY)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+        GROUP BY Division
+        ORDER BY total_unidades DESC
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        SELECT
+            'CL' AS pais,
+            Division,
+            COUNT(DISTINCT sku) AS total_skus,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+            COUNT(DISTINCT tim) AS total_envios_tim
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL COALESCE(NULLIF(@dias_atras, 0), 7) DAY)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+        GROUP BY Division
+        ORDER BY total_unidades DESC
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 4: Control de Calidad y Vencimiento en Tránsito
@@ -244,36 +355,70 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Identifica productos en despacho o tránsito cuya fecha de vencimiento esté 
-      próxima (dentro de los próximos N días) para alertar al gerente de tienda sobre perecibles.
+      Identifica productos en despacho o tránsito cuya fecha de vencimiento esté
+      próxima (dentro de los próximos N días) para alertar sobre perecibles. Soporta
+      tienda puntual o '*' para toda la cadena (PE o CL).
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: tienda
         type: string
-        description: "ID de la tienda destino (ej. '123')."
-        required: true
+        description: "ID de la tienda destino (ej. '123'), o '*' / 'TODAS' / '' para toda la cadena."
+        required: false
       - name: dias_margen
         type: integer
         description: "Días máximos antes del vencimiento para considerarlo alerta (por defecto 15 días)."
         required: false
     statement: |
-      SELECT 
-          sku,
-          Descripcion,
-          Division,
-          Fecha_Vencimiento,
-          DATE_DIFF(Fecha_Vencimiento, CURRENT_DATE("America/Lima"), DAY) AS dias_para_vencer,
-          Unidades,
-          Cajas,
-          tim,
-          Placa,
-          Fecha_Enviado
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 15 DAY)
-        AND Tienda = @tienda
-        AND Fecha_Vencimiento IS NOT NULL
-        AND Fecha_Vencimiento <= DATE_ADD(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(@dias_margen, 15) DAY)
-      ORDER BY Fecha_Vencimiento ASC
-      LIMIT 50;
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        SELECT
+            'PE' AS pais,
+            Tienda,
+            Nombre_Tienda,
+            sku,
+            Descripcion,
+            Division,
+            Fecha_Vencimiento,
+            DATE_DIFF(Fecha_Vencimiento, CURRENT_DATE("America/Lima"), DAY) AS dias_para_vencer,
+            Unidades,
+            Cajas,
+            tim,
+            Placa,
+            Fecha_Enviado
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 15 DAY)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+          AND Fecha_Vencimiento IS NOT NULL
+          AND Fecha_Vencimiento <= DATE_ADD(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(NULLIF(@dias_margen, 0), 15) DAY)
+        ORDER BY Fecha_Vencimiento ASC
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        SELECT
+            'CL' AS pais,
+            Tienda,
+            Nombre_Tienda,
+            sku,
+            Descripcion,
+            Division,
+            Fecha_Vencimiento,
+            DATE_DIFF(Fecha_Vencimiento, CURRENT_DATE("America/Santiago"), DAY) AS dias_para_vencer,
+            Unidades,
+            Cajas,
+            tim,
+            Placa,
+            Fecha_Enviado
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL 15 DAY)
+          AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+          AND Fecha_Vencimiento IS NOT NULL
+          AND Fecha_Vencimiento <= DATE_ADD(CURRENT_DATE("America/Santiago"), INTERVAL COALESCE(NULLIF(@dias_margen, 0), 15) DAY)
+        ORDER BY Fecha_Vencimiento ASC
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 5: Rastreo por Shipment o Delivery Order (Trf_DO)
@@ -283,39 +428,71 @@ tools:
     source: bigquery_logistica_sbx
     description: >
       Permite rastrear despachos cuando el usuario no tiene el número de TIM,
-      pero cuenta con el identificador del Shipment o el número de Trf_DO (Delivery Order).
-      Devuelve el TIM asociado, placa del camión, tienda destino, fecha de despacho y resumen de carga.
+      pero cuenta con el identificador del Shipment o el número de Trf_DO (Delivery Order)
+      en Perú o Chile.
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: shipment
         type: string
-        description: "Identificador del shipment o embarque logístico (ej. '90327449')."
+        description: "Identificador del shipment o embarque logístico (ej. '90327449'). Enviar '' si no aplica."
         required: false
       - name: trf_do
         type: string
-        description: "Número de transferencia u orden de entrega Delivery Order (ej. '22796787', '22798429')."
+        description: "Número de transferencia u orden de entrega Delivery Order (ej. '22796787'). Enviar '' si no aplica."
         required: false
     statement: |
-      SELECT 
-          tim,
-          Shipment, 
-          Trf_DO,
-          Tipo_DO,
-          Placa,
-          Tienda,
-          Nombre_Tienda,
-          Inventario_Whse,
-          FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
-          DATE(Fecha_Enviado) AS fecha_despacho,
-          COUNT(DISTINCT sku) AS total_skus,
-          ROUND(SUM(Unidades), 0) AS total_unidades,
-          ROUND(SUM(Cajas), 0) AS total_cajas,
-          ROUND(SUM(Peso_Total), 2) AS peso_total_kg
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
-        AND (@shipment IS NULL OR @shipment = '' OR CAST(Shipment AS STRING) = @shipment)
-        AND (@trf_do IS NULL OR @trf_do = '' OR CAST(Trf_DO AS STRING) = @trf_do)
-      GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
-      LIMIT 20;
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        SELECT
+            'PE' AS pais,
+            tim,
+            Shipment,
+            Trf_DO,
+            Tipo_DO,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+            DATE(Fecha_Enviado) AS fecha_despacho,
+            COUNT(DISTINCT sku) AS total_skus,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+          AND (TRIM(@shipment) = '' OR CAST(Shipment AS STRING) = TRIM(@shipment))
+          AND (TRIM(@trf_do) = '' OR CAST(Trf_DO AS STRING) = TRIM(@trf_do))
+        GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        SELECT
+            'CL' AS pais,
+            tim,
+            Shipment,
+            Trf_DO,
+            Tipo_DO,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+            DATE(Fecha_Enviado) AS fecha_despacho,
+            COUNT(DISTINCT sku) AS total_skus,
+            ROUND(SUM(Unidades), 0) AS total_unidades,
+            ROUND(SUM(Cajas), 0) AS total_cajas,
+            ROUND(SUM(Peso_Total), 2) AS peso_total_kg
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL 31 DAY)
+          AND (TRIM(@shipment) = '' OR CAST(Shipment AS STRING) = TRIM(@shipment))
+          AND (TRIM(@trf_do) = '' OR CAST(Trf_DO AS STRING) = TRIM(@trf_do))
+        GROUP BY tim, Shipment, Trf_DO, Tipo_DO, Placa, Tienda, Nombre_Tienda, Inventario_Whse, DATE(Fecha_Enviado)
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 6: Búsqueda y Validación de Tiendas por Nombre o Código
@@ -324,29 +501,55 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Busca y valida tiendas de Tottus en la base de datos por nombre comercial
-      (ej. 'Huanuco', 'San Luis', 'Angamos') o por su código numérico ID (ej. '123', '451', '454').
-      Permite verificar si una tienda existe y obtener su código y nombre oficial.
+      Busca y valida tiendas de Tottus en la base de datos (PE o CL) por nombre comercial
+      (ej. 'Huanuco', 'San Luis', 'Angamos') o por su código numérico ID (ej. '123', '451').
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: nombre_parcial
         type: string
-        description: "Nombre comercial o código numérico ID de la tienda a buscar o validar (ej. 'Huanuco', '123', '454')."
-        required: true
+        description: "Nombre comercial o código numérico ID de la tienda a buscar o validar (ej. 'Huanuco', '123', '*')."
+        required: false
     statement: |
-      SELECT 
-          Tienda AS tienda_id,
-          Nombre_Tienda,
-          COUNT(DISTINCT tim) AS total_despachos_recientes,
-          MAX(Fecha_Enviado) AS ultimo_despacho_registrado
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
-        AND (
-          LOWER(Nombre_Tienda) LIKE CONCAT('%', LOWER(@nombre_parcial), '%')
-          OR CAST(Tienda AS STRING) = @nombre_parcial
-        )
-      GROUP BY Tienda, Nombre_Tienda
-      ORDER BY total_despachos_recientes DESC
-      LIMIT 10;
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        SELECT
+            'PE' AS pais,
+            Tienda AS tienda_id,
+            Nombre_Tienda,
+            COUNT(DISTINCT tim) AS total_despachos_recientes,
+            MAX(Fecha_Enviado) AS ultimo_despacho_registrado
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 31 DAY)
+          AND (
+            UPPER(TRIM(@nombre_parcial)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__')
+            OR LOWER(Nombre_Tienda) LIKE CONCAT('%', LOWER(TRIM(@nombre_parcial)), '%')
+            OR CAST(Tienda AS STRING) = TRIM(@nombre_parcial)
+          )
+        GROUP BY Tienda, Nombre_Tienda
+        ORDER BY total_despachos_recientes DESC
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        SELECT
+            'CL' AS pais,
+            Tienda AS tienda_id,
+            Nombre_Tienda,
+            COUNT(DISTINCT tim) AS total_despachos_recientes,
+            MAX(Fecha_Enviado) AS ultimo_despacho_registrado
+        FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL 31 DAY)
+          AND (
+            UPPER(TRIM(@nombre_parcial)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__')
+            OR LOWER(Nombre_Tienda) LIKE CONCAT('%', LOWER(TRIM(@nombre_parcial)), '%')
+            OR CAST(Tienda AS STRING) = TRIM(@nombre_parcial)
+          )
+        GROUP BY Tienda, Nombre_Tienda
+        ORDER BY total_despachos_recientes DESC
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 7: Camiones y TIMs cargados pendientes de despacho
@@ -355,80 +558,133 @@ tools:
     kind: bigquery-sql
     source: bigquery_logistica_sbx
     description: >
-      Identifica camiones (placas) y transferencias (TIMs) que ya fueron cargados 
-      en el Centro de Distribución (CD) pero que aún NO cuentan con fecha de envío o salida 
-      (Hora_de_Carga registrada pero Fecha_Enviado es nula o pendiente) hasta el día de hoy. 
-      Permite saber qué camiones están cargados en espera de despacho.
+      Identifica camiones (placas) y transferencias (TIMs) cargados en el Centro de Distribución (CD)
+      con Hora_de_Carga registrada en los últimos N días (PE o CL). Soporta tienda puntual o '*' para toda la cadena.
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."
+        required: false
       - name: tienda
         type: string
-        description: "Código ID de la tienda destino (ej. '123', '107'). Opcional para ver todas las tiendas."
+        description: "Código ID de la tienda destino (ej. '123', '107'), o '*' / 'TODAS' / '' para todas las tiendas."
         required: false
       - name: placa
         type: string
-        description: "Placa del camión de transporte. Opcional."
+        description: "Placa del camión de transporte. Enviar '' si no aplica."
         required: false
       - name: dias_atras
         type: integer
-        description: "Días hacia atrás a consultar para cargas pendientes (por defecto 15 días)."
+        description: "Días hacia atrás a consultar (por defecto 15 días)."
         required: false
     statement: |
-      WITH datos AS (
-        SELECT 
+      IF UPPER(COALESCE(NULLIF(TRIM(@pais), ''), 'PE')) = 'PE' THEN
+        WITH datos AS (
+          SELECT
+              'PE' AS pais,
+              tim,
+              Placa,
+              Tienda,
+              Nombre_Tienda,
+              Inventario_Whse,
+              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+              COUNT(DISTINCT Pallet) AS total_pallets,
+              COUNT(DISTINCT sku) AS total_skus_distintos,
+              ROUND(SUM(Unidades), 0) AS total_unidades,
+              ROUND(SUM(Cajas), 0) AS total_cajas,
+              ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+              ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+          FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+          WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(NULLIF(@dias_atras, 0), 15) DAY)
+            AND Hora_de_Carga IS NOT NULL
+            AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+            AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+          GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse
+        )
+        SELECT
+            pais,
             tim,
             Placa,
             Tienda,
             Nombre_Tienda,
             Inventario_Whse,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
-            COUNT(DISTINCT Pallet) AS total_pallets,
-            COUNT(DISTINCT sku) AS total_skus_distintos,
-            ROUND(SUM(Unidades), 0) AS total_unidades,
-            ROUND(SUM(Cajas), 0) AS total_cajas,
-            ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
-            ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
-        FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-        WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL COALESCE(@dias_atras, 15) DAY)
-          AND Hora_de_Carga IS NOT NULL
-          AND (@tienda IS NULL OR @tienda = '' OR Tienda = @tienda)
-          AND (@placa IS NULL OR @placa = '' OR Placa = @placa)
-        GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse
-      ),
-      numerados AS (
-        SELECT 
-            *,
-            CASE 
+            hora_carga,
+            CASE
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
               ELSE 96
             END AS lead_time_horas,
-            CASE 
+            CASE
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 24 HOUR))
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 48 HOUR))
               WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 72 HOUR))
               ELSE FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 96 HOUR))
-            END AS fecha_estimada_llegada
+            END AS fecha_estimada_llegada,
+            total_pallets,
+            total_skus_distintos,
+            total_unidades,
+            total_cajas,
+            peso_total_kg,
+            volumen_total_m3
         FROM datos
-      )
-      SELECT 
-          tim,
-          Placa,
-          Tienda,
-          Nombre_Tienda,
-          Inventario_Whse,
-          hora_carga,
-          lead_time_horas,
-          fecha_estimada_llegada,
-          total_pallets,
-          total_skus_distintos,
-          total_unidades,
-          total_cajas,
-          peso_total_kg,
-          volumen_total_m3
-      FROM numerados
-      ORDER BY hora_carga DESC
-      LIMIT 100;
+        ORDER BY hora_carga DESC
+        LIMIT 500;
+      ELSEIF UPPER(TRIM(@pais)) = 'CL' THEN
+        WITH datos AS (
+          SELECT
+              'CL' AS pais,
+              tim,
+              Placa,
+              Tienda,
+              Nombre_Tienda,
+              Inventario_Whse,
+              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga,
+              COUNT(DISTINCT Pallet) AS total_pallets,
+              COUNT(DISTINCT sku) AS total_skus_distintos,
+              ROUND(SUM(Unidades), 0) AS total_unidades,
+              ROUND(SUM(Cajas), 0) AS total_cajas,
+              ROUND(SUM(Peso_Total), 2) AS peso_total_kg,
+              ROUND(SUM(Vol_Enviado), 2) AS volumen_total_m3
+          FROM `tot-corp-plo-sbx.tot_bi_logistica_cl.FT_LOG_SALIDAS`
+          WHERE Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Santiago"), INTERVAL COALESCE(NULLIF(@dias_atras, 0), 15) DAY)
+            AND Hora_de_Carga IS NOT NULL
+            AND (UPPER(TRIM(@tienda)) IN ('', '*', 'TODAS', 'ALL', '__ALL_TIENDA__') OR CAST(Tienda AS STRING) = TRIM(@tienda))
+            AND (TRIM(@placa) = '' OR UPPER(Placa) = UPPER(TRIM(@placa)))
+          GROUP BY tim, Placa, Tienda, Nombre_Tienda, Inventario_Whse
+        )
+        SELECT
+            pais,
+            tim,
+            Placa,
+            Tienda,
+            Nombre_Tienda,
+            Inventario_Whse,
+            hora_carga,
+            CASE
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN 24
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN 48
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN 72
+              ELSE 96
+            END AS lead_time_horas,
+            CASE
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '1') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 24 HOUR))
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '3') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 48 HOUR))
+              WHEN STARTS_WITH(CAST(Tienda AS STRING), '4') THEN FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 72 HOUR))
+              ELSE FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_ADD(TIMESTAMP(hora_carga), INTERVAL 96 HOUR))
+            END AS fecha_estimada_llegada,
+            total_pallets,
+            total_skus_distintos,
+            total_unidades,
+            total_cajas,
+            peso_total_kg,
+            volumen_total_m3
+        FROM datos
+        ORDER BY hora_carga DESC
+        LIMIT 500;
+      ELSE
+        SELECT CONCAT('Código de país no reconocido: ', @pais, '. Valores permitidos: PE o CL') AS error;
+      END IF;
 
   # ----------------------------------------------------
   # HERRAMIENTA 8 (EN CUARENTENA / PLANTILLA): Estado de Pedido y Orden de Compra (OC)
@@ -441,6 +697,10 @@ tools:
       [EN CUARENTENA / PLANTILLA] Identifica el estado de un pedido, su SKU y nombre de producto
       a partir de una TIM u Orden de Compra (OC). Plantilla editable para el flujo de reprogramaciones.
     parameters:
+      - name: pais
+        type: string
+        description: "Código del país ('PE' o 'CL')."
+        required: false
       - name: tim
         type: integer
         description: "Identificador numérico del TIM logístico."
@@ -450,7 +710,8 @@ tools:
         description: "Número identificador de la Orden de Compra (OC)."
         required: false
     statement: |
-      SELECT 
+      SELECT
+          COALESCE(NULLIF(TRIM(@pais), ''), 'PE') AS pais,
           tim,
           CAST(@oc AS STRING) AS orden_compra,
           sku,
@@ -458,17 +719,17 @@ tools:
           'Registrado' AS estado_pedido,
           Nombre_Tienda,
           FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', MAX(Hora_de_Carga)) AS hora_carga
-      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS` 
-      WHERE (@tim IS NULL OR @tim = 0 OR Tim = @tim)
+      FROM `tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`
+      WHERE (@tim = 0 OR Tim = @tim)
         AND Fecha_Enviado >= DATE_SUB(CURRENT_DATE("America/Lima"), INTERVAL 90 DAY)
       GROUP BY tim, sku, Descripcion, Nombre_Tienda
       LIMIT 1;
 
 # ==========================================
-# 3. REGISTRO EN EL TOOLSET
+# 3. REGISTRO EN EL TOOLSET CANÓNICO
 # ==========================================
 toolsets:
-  insights_operativos:
+  mcp_transporte:
     - consultar_despachos_logistica
     - resumen_carga_transporte
     - resumen_despachos_por_division

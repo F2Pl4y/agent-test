@@ -78,34 +78,34 @@ Configurado mediante la variable `ALLOWED_USERS` en [`backend/config.py`](backen
 
 ## 🎯 Catálogo de Herramientas MCP y Alcance Operativo (`tools.yaml` + `MonitoreoService`)
 
-> 📄 **Documentación adicional:**
-> * [**`docs/catalogo_y_arquitectura_mcp.md`**](docs/catalogo_y_arquitectura_mcp.md): Detalle técnico de gobernanza SQL, parámetros tipados, reglas de *Lead Time*, caché TTL, paginación automática y pruebas JSON-RPC 2.0.
+> 📄 **Documentación y Pruebas adicionales:**
+> * [**`consultas_test_gcp.sql`**](consultas_test_gcp.sql): Consultas SQL equivalentes a las 7 herramientas MCP listas para ejecutar y probar en GCP BigQuery Studio.
 > * [**`Preguntas.md`**](Preguntas.md): Guía funcional de fuentes de datos (Reales vs Simuladas), restricciones y catálogo de preguntas operativas.
 
-El agente combina **7 herramientas SQL gobernadas** en BigQuery (`tot-corp-plo-sbx.tot_bi_logistica_pe.FT_LOG_SALIDAS`) servidas por Toolbox MCP y **1 herramienta de monitoreo en vivo** sobre SharePoint/Excel:
+El agente combina **7 herramientas SQL gobernadas** (Toolset canónico `mcp_transporte`, multipaís `'PE'`/`'CL'`, comodín global `'*'` en tienda y `LIMIT 500`) servidas por Toolbox MCP sobre BigQuery (`tot_bi_logistica_pe.FT_LOG_SALIDAS` / `tot_bi_logistica_cl.FT_LOG_SALIDAS`) y **1 herramienta de monitoreo en vivo** sobre SharePoint/Excel:
 
 ### 🚛 Dominio Transporte, Despachos y Flota Logística (8 Herramientas Activas)
 
 1. **`resumen_carga_transporte` — Consolidado de Carga por Camión (Placa) o TIM (BigQuery MCP):** Consolida despachos por camión o transferencia. Devuelve placa, fecha de despacho, hora de carga en CD, *lead time* estimado, fecha estimada de llegada, total de pallets, cajas, unidades, peso total (kg) y volumen ($m^3$).
-   * **Parámetros:** `tim`, `placa`, `tienda`, `fecha`, `fecha_fin`, `pagina`.
+   * **Parámetros:** `pais`, `tim`, `placa`, `tienda` (acepta `'*'`/`'TODAS'`), `fecha`, `fecha_fin`.
 
 2. **`consultar_despachos_logistica` — Detalle Fino de Despachos y SKUs en Tránsito (BigQuery MCP):** Detalle a nivel de producto/SKU (código SKU, descripción del artículo, orden de entrega `Trf_DO`, embarque `Shipment`, hora de carga y tienda destino).
-   * **Parámetros:** `tim`, `tienda`, `sku`, `placa`, `pagina`.
+   * **Parámetros:** `pais`, `tim`, `tienda` (acepta `'*'`/`'TODAS'`), `sku`, `placa`.
 
 3. **`resumen_despachos_por_division` — Despachos Agregados por División Comercial J01 a J11 (BigQuery MCP):** Desglose agregado de unidades, cajas, peso y TIMs por división comercial en los últimos $N$ días.
-   * **Parámetros:** `tienda`, `dias_atras`.
+   * **Parámetros:** `pais`, `tienda` (acepta `'*'`/`'TODAS'`), `dias_atras`.
 
 4. **`alertas_vencimiento_transito` — Control Preventivo de Calidad y Vencimiento en Tránsito (BigQuery MCP):** Identifica productos perecibles próximos a vencer que se encuentran en despacho o tránsito desde el CD hacia las tiendas.
-   * **Parámetros:** `tienda`, `dias_margen`.
+   * **Parámetros:** `pais`, `tienda` (acepta `'*'`/`'TODAS'`), `dias_margen`.
 
 5. **`buscar_por_shipment_o_do` — Rastreo Logístico por Shipment o Delivery Order `Trf_DO` (BigQuery MCP):** Rastreo de despachos cuando el usuario no cuenta con el TIM pero tiene el número de Shipment o DO (Delivery Order).
-   * **Parámetros:** `shipment`, `trf_do`.
+   * **Parámetros:** `pais`, `shipment`, `trf_do`.
 
 6. **`buscar_tienda_por_nombre` — Búsqueda y Validación de Tiendas por Nombre o Código (BigQuery MCP):** Resuelve nombres comerciales (ej. *"Angamos"*, *"San Luis"*, *"Huánuco"*) o códigos a sus IDs oficiales en BigQuery (`123`, `114`, `451`).
-   * **Parámetros:** `nombre_parcial`.
+   * **Parámetros:** `pais`, `nombre_parcial`.
 
 7. **`consultar_cargas_pendientes_despacho` — Camiones y TIMs Cargados en Espera de Salida (BigQuery MCP):** Identifica vehículos cargados en el Centro de Distribución (con `Hora_de_Carga` registrada) pendientes de despacho en los últimos $N$ días.
-   * **Parámetros:** `tienda`, `placa`, `dias_atras`.
+   * **Parámetros:** `pais`, `tienda` (acepta `'*'`/`'TODAS'`), `placa`, `dias_atras`.
 
 8. **`consultar_monitoreo_provincia` (`consultar_monitoreo_unidades`) — Monitoreo Operativo en Tiempo Real (SharePoint / Excel — Provincia y Oriente):** Información viva de seguimiento de unidades de transporte para tiendas de Provincia (`3xx`) y Oriente (`4xx`) desde `Monitoreo General UT Provincia 2030.xlsx` (hoja `Perú`, `Tabla3`). Aporta ubicación actual en carretera (`UBICACIÓN`), placa del `TRACTO`, tipo de unidad (`TIPO DE UT`), análisis de viaje con carga **ÚNICA** o **COMPARTIDA** (ventana de $\pm 2\text{ h}$ en `FIN DE CARGA`), secuencia de paradas (`Punto 1, 2, 3`), hora de salida a ruta, llegada a destino, estado (`STATUS`) y percances (`MOTIVO`).
    * **Parámetros:** `tim`, `placa`, `tienda`, `tracto`.
@@ -207,10 +207,10 @@ agent-test/
 ├── toolbox/
 │   └── tools.yaml               # Definición declarativa de las consultas SQL en BigQuery MCP
 ├── docs/
-│   ├── catalogo_y_arquitectura_mcp.md # Documentación técnica detallada del servidor y herramientas MCP
 │   └── cloud_run_guia_despliegue.md   # Guía paso a paso para despliegue en Google Cloud Run
-├── data/                        # Almacenamiento local de sesiones, estado de monitoreo y bitácora
-├── Preguntas.md                 # Guía funcional de preguntas, fuentes de datos y reglas operativas
+├── data/                              # Almacenamiento local de sesiones, estado de monitoreo y bitácora
+├── consultas_test_gcp.sql             # Consultas SQL equivalentes a los MCPs para pruebas en BigQuery Studio
+├── Preguntas.md                       # Guía funcional de preguntas, fuentes de datos y reglas operativas
 ├── Dockerfile                   # Definición de contenedor Python 3.11-slim para Cloud Run
 ├── requirements.txt             # Dependencias de Python (FastAPI, Uvicorn, google-genai, openpyxl, etc.)
 ├── .env.example                 # Plantilla de variables de entorno (sin secretos)

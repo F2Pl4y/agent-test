@@ -161,9 +161,10 @@ class LogisticaAgent:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
                         "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM específico."),
                         "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo de transporte."),
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '474', '123', '451')."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '474', '123', '451'), o '*' / 'TODAS' para toda la cadena."),
                         "fecha": types.Schema(type=types.Type.STRING, description="Fecha de despacho o fecha de inicio en formato 'YYYY-MM-DD'."),
                         "fecha_fin": types.Schema(type=types.Type.STRING, description="Opcional. Fecha final en formato 'YYYY-MM-DD' cuando se consulta un rango de fechas.")
                     },
@@ -176,7 +177,8 @@ class LogisticaAgent:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '123', '107'). Opcional."),
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código ID de la tienda destino (ej. '123', '107'), o '*' / 'TODAS' para todas las tiendas. Opcional."),
                         "placa": types.Schema(type=types.Type.STRING, description="Placa del camión de transporte. Opcional."),
                         "dias_atras": types.Schema(type=types.Type.INTEGER, description="Días hacia atrás a consultar para cargas pendientes (por defecto 15 días).")
                     },
@@ -189,22 +191,23 @@ class LogisticaAgent:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
                         "tim": types.Schema(type=types.Type.INTEGER, description="Número de TIM logístico para ver sus productos (ej. 655425244)."),
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda (ej. '123', '114')."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código de la tienda (ej. '123', '114'), o '*' / 'TODAS' para toda la cadena."),
                         "sku": types.Schema(type=types.Type.STRING, description="Código SKU puntual."),
-                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo puntual."),
-                        "pagina": types.Schema(type=types.Type.INTEGER, description="Opcional. Número de página específica solo si el usuario pide paginación explícita. Dejar nulo para traer todos los registros.")
+                        "placa": types.Schema(type=types.Type.STRING, description="Placa del vehículo puntual.")
                     },
                     required=[]
                 )
             ),
             types.FunctionDeclaration(
                 name="resumen_despachos_por_division",
-                description="Devuelve el total de unidades y cajas despachadas a una tienda agrupadas por división comercial (J01 a J11).",
+                description="Devuelve el total de unidades y cajas despachadas a una tienda (o a toda la cadena con '*') agrupadas por división comercial (J01 a J11).",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código de tienda destino (ej. '123')."),
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código de tienda destino (ej. '123'), o '*' / 'TODAS' para consolidado global."),
                         "dias_atras": types.Schema(type=types.Type.INTEGER, description="Días hacia atrás a consultar (por defecto 7).")
                     },
                     required=["tienda"]
@@ -212,11 +215,12 @@ class LogisticaAgent:
             ),
             types.FunctionDeclaration(
                 name="alertas_vencimiento_transito",
-                description="Identifica productos en tránsito hacia una tienda cuya fecha de vencimiento esté próxima dentro de los próximos N días.",
+                description="Identifica productos en tránsito hacia una tienda (o toda la cadena con '*') cuya fecha de vencimiento esté próxima dentro de los próximos N días.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "tienda": types.Schema(type=types.Type.STRING, description="Código de tienda destino (ej. '123')."),
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
+                        "tienda": types.Schema(type=types.Type.STRING, description="Código de tienda destino (ej. '123'), o '*' / 'TODAS' para toda la cadena."),
                         "dias_margen": types.Schema(type=types.Type.INTEGER, description="Días máximos antes del vencimiento (por defecto 15).")
                     },
                     required=["tienda"]
@@ -228,6 +232,7 @@ class LogisticaAgent:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
                         "shipment": types.Schema(type=types.Type.STRING, description="Número identificador del shipment (ej. '90327449')."),
                         "trf_do": types.Schema(type=types.Type.STRING, description="Número de la orden de entrega Delivery Order (ej. '22796787').")
                     },
@@ -240,6 +245,7 @@ class LogisticaAgent:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
+                        "pais": types.Schema(type=types.Type.STRING, description="Código del país ('PE' para Perú, 'CL' para Chile). Por defecto 'PE'."),
                         "nombre_parcial": types.Schema(type=types.Type.STRING, description="Nombre comercial o código numérico ID de la tienda a buscar o validar (ej. 'Huanuco', '123', '454').")
                     },
                     required=["nombre_parcial"]
@@ -371,7 +377,8 @@ class LogisticaAgent:
         tool_name: str,
         arguments: dict,
         include_data: bool = False,
-        active_fecha: Optional[str] = None
+        active_fecha: Optional[str] = None,
+        pais: Optional[str] = "PE"
     ) -> Tuple[List[Dict[str, Any]], ToolExecution]:
         """Ejecuta la herramienta seleccionada a través de Toolbox MCP."""
         canonical_name = self._resolve_tool_name(tool_name)
@@ -380,7 +387,10 @@ class LogisticaAgent:
 
         # Asegurar tipo string en identificadores de shipment / trf_do / tienda si vinieron como números
         clean_args = dict(arguments or {})
-        for str_key in ("shipment", "trf_do", "tienda", "sku"):
+        clean_args.pop("pagina", None)  # [MCP-05] Paginación reemplazada por LIMIT 500
+        if not clean_args.get("pais"):
+            clean_args["pais"] = (pais or "PE").strip().upper()
+        for str_key in ("shipment", "trf_do", "tienda", "sku", "pais"):
             if str_key in clean_args and clean_args[str_key] is not None:
                 clean_args[str_key] = str(clean_args[str_key]).strip()
 
@@ -405,13 +415,6 @@ class LogisticaAgent:
                 logger.info(f"📅 Asociando fecha activa de sesión ({active_fecha}) a consulta de camiones para tienda {clean_args.get('tienda')}")
                 clean_args["fecha"] = active_fecha
 
-        # Si la herramienta soporta paginación:
-        # Si Gemini envió pagina=1 por omisión de esquema, lo removemos para que se traigan todas las páginas completas.
-        fetch_all = True
-        if canonical_name in ("consultar_despachos_logistica", "resumen_carga_transporte"):
-            if clean_args.get("pagina") == 1:
-                clean_args.pop("pagina", None)
-            fetch_all = ("pagina" not in clean_args)
         # Manejo especializado de la herramienta de Monitoreo de Unidades (SharePoint / Excel - Locales y Provincia)
         if canonical_name in ("consultar_monitoreo_unidades", "consultar_monitoreo_provincia"):
             tim_param = clean_args.get("tim")
@@ -438,7 +441,7 @@ class LogisticaAgent:
             )
             return rows, execution_record
 
-        rows = await mcp_client.call_tool(canonical_name, clean_args, fetch_all_pages=fetch_all)
+        rows = await mcp_client.call_tool(canonical_name, clean_args)
         rows = self._enrich_rows_with_arrival_estimates(rows)
 
         execution_record = ToolExecution(
@@ -633,7 +636,8 @@ class LogisticaAgent:
                         fn_name,
                         fn_args,
                         include_data=include_data,
-                        active_fecha=active_fecha
+                        active_fecha=active_fecha,
+                        pais=pais
                     )
                     tools_executed.append(exec_log)
                     dict_rows = [r for r in rows if isinstance(r, dict)] if rows else []
